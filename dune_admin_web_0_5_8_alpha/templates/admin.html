@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Admin Panel{% endblock %}
+
+{% block content %}
+<h1>Admin Panel</h1>
+
+<div id="actionOutput" class="msg" style="display:none;"></div>
+
+<div class="grid">
+
+<div class="box">
+<h2>Overrepair Gear</h2>
+
+<div class="warning">
+This directly edits the database.<br><br>
+The character must be logged off before running this.<br>
+Items must be unequipped and in the character inventory.
+</div>
+
+<form id="overrepairForm">
+
+    <label>Character / Inventory</label>
+    <select id="overrepairCharacterSelect" onchange="fillOverrepairFields()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Character Actor ID</label>
+    <input type="text" name="character_actor_id" id="overrepairActorId" placeholder="Example: 6" required>
+
+    <label>Inventory ID</label>
+    <input type="text" name="inventory_id" id="overrepairInventoryId" placeholder="Example: 1" required>
+
+    <label>Durability Value</label>
+    <input type="text" name="durability" value="{{ default_overrepair_durability }}" required>
+
+    <button type="submit">Overrepair Gear</button>
+</form>
+</div>
+
+<div class="box">
+<h2>Vehicle Module Repair</h2>
+
+<div class="warning">
+Experimental admin-only tool.<br><br>
+This updates CurrentDurability and MaxDurability on every module in dune.vehicle_modules for the selected vehicle.
+It is intended for repairing vehicle modules, not cloning or spawning vehicles.<br><br>
+Recommended first use: test on a low-risk vehicle and confirm in-game behavior after relog/reload.
+</div>
+
+<form id="vehicleRepairForm">
+
+    <label>Vehicle</label>
+    <select id="vehicleSelect" onchange="fillVehicleRepairFields()">
+        <option value="">Loading vehicles...</option>
+    </select>
+
+    <label>Vehicle ID</label>
+    <input type="text" name="vehicle_id" id="vehicleRepairId" placeholder="Example: 34" required>
+
+    <label>Durability Value</label>
+    <input type="text" name="durability" value="{{ default_vehicle_repair_durability }}" required>
+
+    <button type="submit">Repair Vehicle Modules</button>
+</form>
+</div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dune-admin.js"></script>
+<script>
+loadCharactersForAdminPage();
+loadVehiclesForAdminPage();
+
+const overrepairForm = document.getElementById("overrepairForm");
+overrepairForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    if (!confirm("This directly edits database rows. Character must be offline and items must be unequipped/in inventory. Continue?")) {
+        return;
+    }
+
+    await postForm("/api/overrepair", overrepairForm);
+});
+
+const vehicleRepairForm = document.getElementById("vehicleRepairForm");
+vehicleRepairForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    if (!confirm("This directly edits vehicle module durability rows. Test carefully. Continue?")) {
+        return;
+    }
+
+    await postForm("/api/repair-vehicle", vehicleRepairForm);
+});
+</script>
+{% endblock %}

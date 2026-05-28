@@ -1,0 +1,45 @@
+# QUICK START TEST FLOW
+
+1. Start the RedBlink stack normally.
+
+2. Place required assets into:
+   ./static/
+
+   Required:
+
+   * dune-admin.png
+   * arrakis_hb.webp
+   * deep_desert.webp
+
+3. Launch the web-admin.
+
+4. First login creates the initial admin account.
+
+5. Recommended demo/test flow:
+
+   * Open Who's Online
+   * Verify live Hagga Basin map markers
+   * Test item search
+   * Grant Mk6 Scout Ornithopter
+   * Grant Mk6 Medium Ornithopter kit
+   * Open Live Map
+   * Select character
+   * Click map to populate teleport coordinates
+   * Test offline teleport
+   * Test Emergency Return to Safe Hagga Basin Point
+
+6. Viewer accounts:
+
+   * can view online list and map preview
+   * cannot teleport or use admin tools
+
+7. Operator/Admin:
+
+   * can use teleport and recovery tools
+   * admin retains direct SQL-oriented tools
+
+## KNOWN EXPERIMENTAL FEATURES
+
+* Vehicle module repair is experimental and may not yet affect live thopter durability in-game.
+* Deep Desert partition behavior may vary by server stack/version.
+* Teleport is intended for offline characters only.
