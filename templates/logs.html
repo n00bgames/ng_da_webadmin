@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Action Logs{% endblock %}
+
+{% block content %}
+<div class="box">
+<h1>Action Logs</h1>
+<pre id="logOutput">{{ "\n".join(lines) }}</pre>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dune-admin.js"></script>
+<script>
+setInterval(refreshLogs, 5000);
+</script>
+{% endblock %}

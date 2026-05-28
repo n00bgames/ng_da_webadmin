@@ -1,0 +1,615 @@
+{% extends "base.html" %}
+{% block title %}Live Arrakis Map{% endblock %}
+
+{% block head_extra %}
+<style>
+.map-layout {
+    display: grid;
+    grid-template-columns: 320px 1fr;
+    gap: 20px;
+}
+
+.map-panel {
+    background: #080808;
+    border: 1px solid #333;
+    padding: 16px;
+    box-shadow: 0 0 18px rgba(255,140,0,0.08);
+}
+
+.map-frame {
+    position: relative;
+    height: 78vh;
+    overflow: auto;
+    background: #020202;
+    border: 1px solid #333;
+    cursor: grab;
+}
+
+.map-frame.dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.map-canvas {
+    position: relative;
+    transform-origin: top left;
+}
+
+.map-image {
+    position: absolute;
+    left: 0;
+    top: 0;
+    user-select: none;
+    pointer-events: none;
+}
+
+.marker-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.map-marker {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #000;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    z-index: 5;
+}
+
+.map-marker.player {
+    background: #4aa3ff;
+    box-shadow: 0 0 12px #4aa3ff;
+}
+
+.map-marker.vehicle {
+    background: #71d36b;
+    box-shadow: 0 0 12px #71d36b;
+}
+
+.map-marker.base {
+    background: #d6a444;
+    box-shadow: 0 0 12px #d6a444;
+}
+
+.map-marker:hover {
+    width: 24px;
+    height: 24px;
+    z-index: 10;
+}
+
+.marker-tip {
+    display: none;
+    position: absolute;
+    left: 22px;
+    top: -8px;
+    min-width: 220px;
+    background: #050505;
+    border: 1px solid #6a4a18;
+    color: #ddd;
+    padding: 8px;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.map-marker:hover .marker-tip {
+    display: block;
+}
+
+.map-list {
+    max-height: 360px;
+    overflow: auto;
+    font-size: 14px;
+}
+
+.map-list-item {
+    border-bottom: 1px solid #222;
+    padding: 8px 0;
+    cursor: pointer;
+}
+
+.map-list-item:hover {
+    color: #fff;
+}
+
+.coord-box {
+    font-family: monospace;
+    font-size: 14px;
+    background: #111;
+    border: 1px solid #333;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+.map-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.map-tab {
+    padding: 10px;
+    margin: 0;
+}
+
+.map-tab.active {
+    border-color: #d2b07a;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(210,176,122,0.25);
+}
+
+@media (max-width: 1100px) {
+    .map-layout {
+        grid-template-columns: 1fr;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Live Arrakis Map</h1>
+
+<div class="warning">
+Map assets expected:<br>
+- <b>/static/arrakis_hb.webp</b> for Hagga Basin<br>
+- <b>/static/deep_desert.webp</b> for Deep Desert<br><br>
+Markers come from <b>dune.actors.transform</b>. Teleport uses <b>dune.admin_move_offline_player_to_partition</b> and is admin-only/offline-player oriented.
+</div>
+
+<div class="map-layout">
+
+<div class="map-panel">
+    <h2 id="mapTitle">Live Map</h2>
+
+    <div class="map-tabs" id="mapTabs"></div>
+
+    <button type="button" onclick="refreshMapMarkers()">Refresh Map</button>
+
+    <label>Zoom</label>
+    <input id="mapZoom" type="range" min="5" max="100" value="18" oninput="setMapZoomFromSlider()">
+    <div id="zoomReadout">18%</div>
+
+    <div class="coord-box" id="mapSummary">
+        Loading markers...
+    </div>
+
+    {% if session.role != "viewer" %}
+    <h2>Offline Teleport</h2>
+    <div class="warning">
+        Use only for offline characters. Click a player marker to fill this form, or enter values manually.
+        Deep Desert partition ID is not prefilled until confirmed. Click anywhere on the map to populate target X/Y coordinates.
+    </div>
+
+    <form id="teleportForm">
+        <input type="hidden" name="map_key" id="teleportMapKey">
+
+        <label>Character</label>
+        <select id="teleportCharacterSelect" onchange="fillTeleportCharacter()">
+            <option value="">Loading characters...</option>
+        </select>
+
+        <label>FLS ID</label>
+        <input type="text" name="fls_id" id="teleportFlsId" placeholder="EA... / player FLS">
+
+        <label>Partition ID</label>
+        <input type="text" name="partition_id" id="teleportPartitionId">
+
+        <label>X</label>
+        <input type="text" name="x" id="teleportX">
+
+        <label>Y</label>
+        <input type="text" name="y" id="teleportY">
+
+        <label>Z</label>
+        <input type="text" name="z" id="teleportZ" value="1000">
+
+        <button type="submit">Teleport Offline Player</button>
+
+        <button type="button" onclick="emergencyReturnToHaggaBasin()">
+            Emergency Return to Safe Hagga Basin Point
+        </button>
+    </form>
+    {% endif %}
+
+    <h2>Visible Markers</h2>
+    <div class="map-list" id="markerList"></div>
+
+    <div id="actionOutput" class="msg" style="display:none;"></div>
+</div>
+
+<div class="map-frame" id="mapFrame">
+    <div class="map-canvas" id="mapCanvas">
+        <img class="map-image" id="mapImage" src="" alt="">
+        <div class="marker-layer" id="markerLayer"></div>
+    </div>
+</div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dune-admin.js"></script>
+<script>
+const mapConfigs = {{ map_configs|tojson }};
+let selectedMapKey = "{{ default_map_key }}";
+let mapConfig = mapConfigs[selectedMapKey];
+let mapMarkers = [];
+let currentZoom = 0.18;
+let teleportCharacters = [];
+let isDraggingMap = false;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragStartScrollLeft = 0;
+let dragStartScrollTop = 0;
+
+function mapPixelToWorld(px, py) {
+    const x = mapConfig.min_x + (px / mapConfig.width) * (mapConfig.max_x - mapConfig.min_x);
+    let y = mapConfig.min_y + (py / mapConfig.height) * (mapConfig.max_y - mapConfig.min_y);
+
+    if (mapConfig.flip_y) {
+        const unflippedPy = mapConfig.height - py;
+        y = mapConfig.min_y + (unflippedPy / mapConfig.height) * (mapConfig.max_y - mapConfig.min_y);
+    }
+
+    return { x, y };
+}
+
+function fillTeleportTargetFromMapClick(event) {
+    const frame = document.getElementById("mapFrame");
+    const rect = frame.getBoundingClientRect();
+
+    const px = (frame.scrollLeft + (event.clientX - rect.left)) / currentZoom;
+    const py = (frame.scrollTop + (event.clientY - rect.top)) / currentZoom;
+
+    if (px < 0 || py < 0 || px > mapConfig.width || py > mapConfig.height) {
+        return;
+    }
+
+    const world = mapPixelToWorld(px, py);
+
+    const xInput = document.getElementById("teleportX");
+    const yInput = document.getElementById("teleportY");
+    const zInput = document.getElementById("teleportZ");
+    const mapKeyInput = document.getElementById("teleportMapKey");
+    const partitionInput = document.getElementById("teleportPartitionId");
+
+    if (xInput) xInput.value = world.x.toFixed(2);
+    if (yInput) yInput.value = world.y.toFixed(2);
+    if (zInput && !zInput.value) zInput.value = "1000";
+    if (mapKeyInput) mapKeyInput.value = selectedMapKey;
+    if (partitionInput && !partitionInput.value) partitionInput.value = mapConfig.default_partition_id || "";
+}
+
+async function loadTeleportCharacters() {
+    const response = await fetch("/api/characters?include_offline=1");
+    const data = await response.json();
+
+    teleportCharacters = data.characters || [];
+
+    const select = document.getElementById("teleportCharacterSelect");
+    if (!select) return;
+
+    select.innerHTML = `<option value="">Select offline/online character...</option>`;
+
+    teleportCharacters.forEach((c, index) => {
+        const opt = document.createElement("option");
+        opt.value = String(index);
+        opt.textContent = `[${c.online_status || "Unknown"}] ${c.character_name || "Unknown"} | ${c.fls_id || ""}`;
+        select.appendChild(opt);
+    });
+}
+
+function fillTeleportCharacter() {
+    const select = document.getElementById("teleportCharacterSelect");
+    const fls = document.getElementById("teleportFlsId");
+
+    if (!select || !fls || select.value === "") return;
+
+    const character = teleportCharacters[Number(select.value)];
+    if (!character) return;
+
+    fls.value = character.fls_id || "";
+}
+
+function initMapTabs() {
+    const tabs = document.getElementById("mapTabs");
+    tabs.innerHTML = "";
+
+    Object.keys(mapConfigs).forEach(key => {
+        const cfg = mapConfigs[key];
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "map-tab" + (key === selectedMapKey ? " active" : "");
+        btn.textContent = cfg.label;
+        btn.addEventListener("click", () => switchMap(key));
+        tabs.appendChild(btn);
+    });
+}
+
+function switchMap(key) {
+    selectedMapKey = key;
+    mapConfig = mapConfigs[key];
+
+    document.querySelectorAll(".map-tab").forEach(btn => btn.classList.remove("active"));
+    initMapTabs();
+
+    const partitionInput = document.getElementById("teleportPartitionId");
+    const mapKeyInput = document.getElementById("teleportMapKey");
+
+    if (partitionInput) partitionInput.value = mapConfig.default_partition_id || "";
+    if (mapKeyInput) mapKeyInput.value = selectedMapKey;
+
+    initMapCanvas();
+    refreshMapMarkers();
+}
+
+function clampZoom(value) {
+    return Math.max(0.05, Math.min(1.00, value));
+}
+
+function syncZoomSlider() {
+    const slider = document.getElementById("mapZoom");
+    const readout = document.getElementById("zoomReadout");
+
+    if (slider) slider.value = Math.round(currentZoom * 100);
+    if (readout) readout.textContent = `${Math.round(currentZoom * 100)}%`;
+}
+
+function setZoomAroundPoint(newZoom, clientX, clientY) {
+    const frame = document.getElementById("mapFrame");
+    const oldZoom = currentZoom;
+
+    newZoom = clampZoom(newZoom);
+
+    if (newZoom === oldZoom) return;
+
+    const rect = frame.getBoundingClientRect();
+
+    // Map-space coordinate under the cursor before zoom.
+    const mapX = (frame.scrollLeft + (clientX - rect.left)) / oldZoom;
+    const mapY = (frame.scrollTop + (clientY - rect.top)) / oldZoom;
+
+    currentZoom = newZoom;
+    syncZoomSlider();
+    renderMapMarkers();
+
+    // Restore that same map-space coordinate under the cursor after zoom.
+    frame.scrollLeft = mapX * currentZoom - (clientX - rect.left);
+    frame.scrollTop = mapY * currentZoom - (clientY - rect.top);
+}
+
+function wireMapMouseControls() {
+    const frame = document.getElementById("mapFrame");
+    if (!frame) return;
+
+    frame.addEventListener("wheel", function(event) {
+        event.preventDefault();
+
+        const zoomStep = event.deltaY < 0 ? 1.12 : 0.88;
+        setZoomAroundPoint(currentZoom * zoomStep, event.clientX, event.clientY);
+    }, { passive: false });
+
+    frame.addEventListener("mousedown", function(event) {
+        // Left button only. Avoid dragging from controls/buttons if any end up inside the map later.
+        if (event.button !== 0) return;
+
+        isDraggingMap = true;
+        frame.classList.add("dragging");
+
+        dragStartX = event.clientX;
+        dragStartY = event.clientY;
+        dragStartScrollLeft = frame.scrollLeft;
+        dragStartScrollTop = frame.scrollTop;
+    });
+
+    frame.addEventListener("click", function(event) {
+        const moved =
+            Math.abs(event.clientX - dragStartX) +
+            Math.abs(event.clientY - dragStartY);
+
+        // Treat tiny/no movement as a target selection click.
+        if (moved < 8) {
+            fillTeleportTargetFromMapClick(event);
+        }
+    });
+
+    window.addEventListener("mousemove", function(event) {
+        if (!isDraggingMap) return;
+
+        frame.scrollLeft = dragStartScrollLeft - (event.clientX - dragStartX);
+        frame.scrollTop = dragStartScrollTop - (event.clientY - dragStartY);
+    });
+
+    window.addEventListener("mouseup", function() {
+        isDraggingMap = false;
+        frame.classList.remove("dragging");
+    });
+}
+
+function initMapCanvas() {
+    const canvas = document.getElementById("mapCanvas");
+    const image = document.getElementById("mapImage");
+    const layer = document.getElementById("markerLayer");
+    const title = document.getElementById("mapTitle");
+
+    title.textContent = mapConfig.label;
+
+    image.src = `/static/${mapConfig.image}`;
+    image.alt = mapConfig.label;
+
+    canvas.style.width = `${mapConfig.width * currentZoom}px`;
+    canvas.style.height = `${mapConfig.height * currentZoom}px`;
+
+    image.style.width = `${mapConfig.width * currentZoom}px`;
+    image.style.height = `${mapConfig.height * currentZoom}px`;
+
+    layer.style.width = `${mapConfig.width * currentZoom}px`;
+    layer.style.height = `${mapConfig.height * currentZoom}px`;
+}
+
+function setMapZoomFromSlider() {
+    const slider = document.getElementById("mapZoom");
+    currentZoom = clampZoom(Number(slider.value) / 100);
+    syncZoomSlider();
+    renderMapMarkers();
+}
+
+function markerLabel(marker) {
+    return marker.name || `${marker.type} ${marker.id}`;
+}
+
+function fillTeleportFromMarker(marker) {
+    const fls = document.getElementById("teleportFlsId");
+    const x = document.getElementById("teleportX");
+    const y = document.getElementById("teleportY");
+    const z = document.getElementById("teleportZ");
+    const mapKey = document.getElementById("teleportMapKey");
+    const partition = document.getElementById("teleportPartitionId");
+
+    if (fls && marker.fls_id) fls.value = marker.fls_id;
+    if (x) x.value = marker.x;
+    if (y) y.value = marker.y;
+    if (z) z.value = marker.z;
+    if (mapKey) mapKey.value = selectedMapKey;
+    if (partition && !partition.value) partition.value = mapConfig.default_partition_id || "";
+}
+
+function centerOnMarker(marker) {
+    const frame = document.getElementById("mapFrame");
+    frame.scrollLeft = marker.px * currentZoom - frame.clientWidth / 2;
+    frame.scrollTop = marker.py * currentZoom - frame.clientHeight / 2;
+}
+
+function renderMapMarkers() {
+    initMapCanvas();
+
+    const layer = document.getElementById("markerLayer");
+    const list = document.getElementById("markerList");
+    const summary = document.getElementById("mapSummary");
+
+    layer.innerHTML = "";
+    list.innerHTML = "";
+
+    const visible = mapMarkers.filter(m => m.in_bounds);
+
+    summary.innerHTML = `
+        Map: ${escapeHtml(mapConfig.key)}<br>
+        Players: ${visible.filter(m => m.type === "player").length}<br>
+        Vehicles: ${visible.filter(m => m.type === "vehicle").length}<br>
+        Bases: ${visible.filter(m => m.type === "base").length}<br>
+        Total: ${visible.length}
+    `;
+
+    if (visible.length === 0) {
+        list.innerHTML = "No in-bounds markers on this map yet.";
+        return;
+    }
+
+    visible.forEach(marker => {
+        const node = document.createElement("button");
+        node.type = "button";
+        node.className = `map-marker ${marker.type}`;
+        node.style.left = `${marker.px * currentZoom}px`;
+        node.style.top = `${marker.py * currentZoom}px`;
+        node.title = markerLabel(marker);
+
+        node.innerHTML = `
+            <span class="marker-tip">
+                <b>${escapeHtml(markerLabel(marker))}</b><br>
+                ${escapeHtml(marker.type)} #${escapeHtml(marker.id)}<br>
+                X ${Number(marker.x).toFixed(2)}<br>
+                Y ${Number(marker.y).toFixed(2)}<br>
+                Z ${Number(marker.z).toFixed(2)}
+            </span>
+        `;
+
+        node.addEventListener("click", (event) => {
+            event.stopPropagation();
+            fillTeleportFromMarker(marker);
+            centerOnMarker(marker);
+        });
+
+        layer.appendChild(node);
+
+        const item = document.createElement("div");
+        item.className = "map-list-item";
+        item.innerHTML = `
+            <b>${escapeHtml(markerLabel(marker))}</b><br>
+            ${escapeHtml(marker.type)} | X ${Number(marker.x).toFixed(0)} Y ${Number(marker.y).toFixed(0)} Z ${Number(marker.z).toFixed(0)}
+        `;
+        item.addEventListener("click", () => {
+            fillTeleportFromMarker(marker);
+            centerOnMarker(marker);
+        });
+
+        list.appendChild(item);
+    });
+}
+
+async function refreshMapMarkers() {
+    const response = await fetch(`/api/map-markers?map=${encodeURIComponent(selectedMapKey)}`);
+    const data = await response.json();
+
+    if (!data.ok) {
+        showOutput(data.error || "Failed to load map markers.");
+        return;
+    }
+
+    mapMarkers = data.markers || [];
+    renderMapMarkers();
+}
+
+async function emergencyReturnToHaggaBasin() {
+    const fls = document.getElementById("teleportFlsId");
+
+    if (!fls || !fls.value) {
+        alert("Select a character or enter an FLS ID first.");
+        return;
+    }
+
+    if (!confirm("Emergency return selected character to configured Hagga Basin safe point? Character should be offline.")) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("fls_id", fls.value);
+
+    const response = await fetch("/api/emergency-return", {
+        method: "POST",
+        body: formData
+    });
+
+    const data = await response.json();
+
+    if (!data.ok) {
+        showOutput(data.error || "Emergency return failed.");
+        return;
+    }
+
+    showOutput(data.output || "Emergency return complete.");
+}
+
+const teleportForm = document.getElementById("teleportForm");
+if (teleportForm) {
+    teleportForm.addEventListener("submit", async function(event) {
+        event.preventDefault();
+
+        if (!confirm("Teleport uses direct DB function and is intended for OFFLINE characters. Continue?")) {
+            return;
+        }
+
+        await postForm("/api/teleport-offline", teleportForm);
+    });
+}
+
+wireMapMouseControls();
+loadTeleportCharacters();
+initMapTabs();
+switchMap(selectedMapKey);
+setInterval(refreshMapMarkers, 10000);
+</script>
+{% endblock %}

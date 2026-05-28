@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}My Account{% endblock %}
+
+{% block content %}
+<div class="box">
+<h1>My Account</h1>
+
+{% if message %}
+<div class="msg">{{ message }}</div>
+{% endif %}
+
+<form method="post">
+    <label>Username</label>
+    <input name="username" value="{{ session.user }}">
+
+    <label>New Password</label>
+    <input type="password" name="password" placeholder="Leave blank to keep current">
+
+    <button>Save</button>
+</form>
+</div>
+{% endblock %}

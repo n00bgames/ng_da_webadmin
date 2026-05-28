@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}Infrastructure{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+<style>
+.infra-status {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+}
+.status-pill {
+    border: 1px solid #444;
+    background: #080808;
+    padding: 12px;
+    border-radius: 10px;
+}
+.status-on {
+    color: #8ee28e;
+}
+.status-off {
+    color: #e28e8e;
+}
+.terminal-wrap {
+    background: #050505;
+    border: 1px solid #6a4a18;
+    padding: 12px;
+    min-height: 420px;
+}
+#terminal {
+    height: 420px;
+}
+.small-note {
+    font-size: 14px;
+    color: #888;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Infrastructure</h1>
+
+<div class="warning">
+This page is admin-only. These tools can affect the VM host and RedBlink Docker stack.
+Keep them disabled unless intentionally testing on a trusted LAN/VPN.
+</div>
+
+<div class="infra-status">
+    <div class="status-pill">
+        Host Command Runner:
+        {% if enable_host_command_runner %}
+        <b class="status-on">ENABLED</b>
+        {% else %}
+        <b class="status-off">DISABLED</b>
+        {% endif %}
+    </div>
+
+    <div class="status-pill">
+        Stack Installer:
+        {% if enable_stack_installer %}
+        <b class="status-on">ENABLED</b>
+        {% else %}
+        <b class="status-off">DISABLED</b>
+        {% endif %}
+    </div>
+
+    <div class="status-pill">
+        Full Host Shell:
+        {% if enable_host_shell %}
+        <b class="status-on">ENABLED</b>
+        {% else %}
+        <b class="status-off">DISABLED</b>
+        {% endif %}
+    </div>
+</div>
+
+<div id="actionOutput" class="msg" style="display:none;"></div>
+
+<div class="grid">
+
+<div class="box">
+<h2>Host Command Runner</h2>
+
+<div class="warning">
+Safer than the full shell. Runs only predefined diagnostic commands.
+Enable with <b>ENABLE_HOST_COMMAND_RUNNER=1</b>.
+</div>
+
+<form class="infraCommandForm">
+    <input type="hidden" name="command" value="system_info">
+    <button type="submit">Run System Info</button>
+</form>
+
+<form class="infraCommandForm">
+    <input type="hidden" name="command" value="docker_ps">
+    <button type="submit">Run Docker PS</button>
+</form>
+
+<form class="infraCommandForm">
+    <input type="hidden" name="command" value="docker_compose_ps">
+    <button type="submit">Run Docker Compose PS</button>
+</form>
+
+<form class="infraCommandForm">
+    <input type="hidden" name="command" value="dune_status">
+    <button type="submit">Run Dune Status</button>
+</form>
+</div>
+
+<div class="box">
+<h2>RedBlink Stack Installer</h2>
+
+<div class="warning">
+Guided installer for:<br>
+{{ redblink_repo_url }}<br><br>
+Target path:<br>
+{{ redblink_install_dir }}<br><br>
+Enable with <b>ENABLE_STACK_INSTALLER=1</b>.
+</div>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="prereq">
+    <button type="submit">1. Check Prerequisites</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="install_base_packages">
+    <button type="submit">2. Install Base Packages</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="clone_or_pull">
+    <button type="submit">3. Clone or Pull RedBlink Stack</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="install_dune_command">
+    <button type="submit">4. Install dune Command</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="dune_init">
+    <button type="submit">5. Run dune init</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="docker_ps">
+    <button type="submit">6. Verify Docker Containers</button>
+</form>
+
+<p class="small-note">
+The Funcom self-host token/config flow may still require interactive input during <b>dune init</b>.
+Use the full shell if the guided step cannot handle the interaction.
+</p>
+</div>
+
+</div>
+
+<div class="box">
+<h2>Full Host Shell</h2>
+
+<div class="warning">
+Full browser shell is extremely powerful. Enable only for trusted admins with <b>ENABLE_HOST_SHELL=1</b>.
+All commands run with the permissions of the user running this Flask app.
+</div>
+
+{% if enable_host_shell %}
+<button type="button" onclick="startTerminal()">Start Host Shell</button>
+<div class="terminal-wrap">
+    <div id="terminal"></div>
+</div>
+{% else %}
+<p>Host shell is disabled.</p>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dune-admin.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+
+<script>
+document.querySelectorAll(".infraCommandForm").forEach(form => {
+    form.addEventListener("submit", async function(event) {
+        event.preventDefault();
+
+        if (!confirm("Run host diagnostic command?")) return;
+
+        await postForm("/api/infra-command", form);
+    });
+});
+
+document.querySelectorAll(".installerStepForm").forEach(form => {
+    form.addEventListener("submit", async function(event) {
+        event.preventDefault();
+
+        if (!confirm("Run installer step on the VM host?")) return;
+
+        await postForm("/api/installer-step", form);
+    });
+});
+
+let termStarted = false;
+
+function startTerminal() {
+    if (termStarted) return;
+    termStarted = true;
+
+    const term = new Terminal({
+        cursorBlink: true,
+        convertEol: true,
+        fontSize: 14,
+        theme: {
+            background: "#050505",
+            foreground: "#d8c08a"
+        }
+    });
+
+    term.open(document.getElementById("terminal"));
+
+    const socket = io();
+
+    socket.on("connect", () => {
+        term.write("[socket connected]\\r\\n");
+        socket.emit("shell_start");
+    });
+
+    socket.on("shell_output", msg => {
+        term.write(msg.data);
+    });
+
+    socket.on("disconnect", () => {
+        term.write("\\r\\n[socket disconnected]\\r\\n");
+    });
+
+    term.onData(data => {
+        socket.emit("shell_input", { data });
+    });
+}
+</script>
+{% endblock %}
