@@ -298,6 +298,41 @@ chmod +x start.sh
 ./start.sh
 ```
 
+## Linux Shell Script Formatting
+
+If shell scripts fail with errors such as:
+
+```text
+cannot execute: required file not found
+```
+
+or:
+
+```text
+/bin/bash^M: bad interpreter
+```
+
+the files were likely saved with Windows (CRLF) line endings.
+
+Convert them to Linux format:
+
+```bash
+find . -type f -name "*.sh" -exec sed -i 's/\r$//' {} \;
+```
+
+or, if installed:
+
+```bash
+find . -type f -name "*.sh" -exec dos2unix {} \;
+```
+
+Then make them executable:
+
+```bash
+chmod +x start.sh
+chmod +x setup.sh
+```
+
 Browse to:
 
 ```text
