@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/logo.png" width="300">
+  <img src="images/logo.png" width="1200">
 </p>
 
 # n00bGame's Dune Awakening Web-Admin
