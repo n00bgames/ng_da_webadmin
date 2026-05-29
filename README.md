@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" width="300">
+</p>
+
 # n00bGame's Dune Awakening Web-Admin
 
 ![Version](https://img.shields.io/badge/version-0.6.4--alpha-orange)
