@@ -25,6 +25,26 @@ Built for private/LAN-hosted servers with a focus on:
 
 ---
 
+## Screenshots
+
+### Dashboard
+
+![Dashboard](images/dashboard.png)
+
+### Live Map
+
+![Live Map](images/live-map.png)
+
+### Infrastructure
+
+![Infrastructure](images/infrastructure.png)
+
+### Dune Manager/Shell
+
+![Infrastructure](images/dune-manager.png)
+
+---
+
 # Current Version
 
 ```text
