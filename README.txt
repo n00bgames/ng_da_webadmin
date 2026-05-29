@@ -1,4 +1,4 @@
-Dune Admin Web App 0.5.9-alpha
+Dune Admin Web App 0.6.4-alpha
 ================================
 
 Public demonstration / RedBlink review build.
@@ -79,7 +79,7 @@ Preserve:
 
 VERSION
 -------
-Panel: 0.5.9-alpha
+Panel: 0.6.4-alpha
 Target RedBlink Stack: v1.3.1
 
 
@@ -106,3 +106,96 @@ export REDBLINK_INSTALL_DIR=/home/steihl/dune-awakening-selfhost-docker
 WARNING:
 The full host shell runs with the permissions of the user running app.py.
 Treat it as equivalent to SSH access to the VM host.
+
+
+0.5.9.1-alpha PATCH NOTES
+-------------------------
+- Installer commands now use sudo -n to avoid hanging on sudo password prompts.
+- Added installer steps/buttons for:
+  - base packages
+  - official Docker install
+  - Ubuntu Docker fallback
+  - Docker Compose plugin
+  - Docker group membership
+  - Docker service enable/start
+
+NOTE:
+For web-triggered installer steps that require sudo, configure passwordless sudo
+for trusted admins or run the app under an account that can execute the required
+commands without an interactive password prompt.
+
+
+0.6.0-alpha PATCH NOTES
+-----------------------
+- dune init is now treated as an interactive shell workflow.
+- Added Infrastructure buttons:
+  - Open Shell and Run dune init
+  - Open Shell and Run dune manager
+- Removed the misleading non-interactive dune init installer flow from the UI.
+- Included GPLv3 LICENSE in the release package.
+
+NOTE:
+Host Shell must be enabled with:
+
+export ENABLE_HOST_SHELL=1
+
+The shell runs as the same Linux user that launches app.py.
+
+
+0.6.1-alpha PATCH NOTES
+-----------------------
+- Doubled host shell console height.
+- Added Infrastructure passwordless sudo / visudo placard.
+- Added dashboard system resource panel:
+  - CPU usage
+  - RAM usage
+  - disk usage
+  - network sent/received since boot
+- Added dashboard world summary:
+  - total players
+  - online players
+  - total vehicles
+  - vehicles in Hagga Basin
+  - vehicles in Deep Desert
+- Added psutil dependency.
+
+
+0.6.2-alpha PATCH NOTES
+-----------------------
+- Added /api/dashboard-metrics.
+- Dashboard CPU/RAM/Disk now render as graphical usage bars.
+- Dashboard metrics refresh by AJAX every 5 seconds.
+- Network panel now shows RX/TX rate plus totals.
+- World summary cards refresh live with dashboard metrics.
+
+
+0.6.2.1-alpha PATCH NOTES
+-------------------------
+- Reduced live map marker/blip size by 50% for better map readability.
+- Reduced Who's Online Hagga Basin preview markers by 50%.
+
+
+0.6.3-alpha PATCH NOTES
+-----------------------
+- Added xterm.js FitAddon for the host shell.
+- Host shell now fills the available terminal panel instead of rendering as a tiny viewport.
+- Terminal refits after startup and browser resize.
+
+
+0.6.4-alpha PATCH NOTES
+-----------------------
+- Target RedBlink stack updated to v1.3.2.
+- Added Server Management controls for:
+  - dune maps list
+  - dune maps mode
+  - dune maps set <map> dynamic
+  - dune maps set <map> always-on
+  - dune maps reconcile
+- Added Deep Desert dual PvP/PvE controls:
+  - status
+  - enable
+  - disable
+  - force disable
+  - bootstrap
+  - repair
+- Hardened browser shell fitting with FitAddon fallback/manual resize.

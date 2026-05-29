@@ -26,14 +26,42 @@
     background: #050505;
     border: 1px solid #6a4a18;
     padding: 12px;
-    min-height: 420px;
+    height: 75vh;
+    min-height: 700px;
 }
+
 #terminal {
-    height: 420px;
+    height: 100%;
+    width: 100%;
+}
+
+#terminal .xterm {
+    height: 100%;
+}
+
+#terminal .xterm-viewport {
+    height: 100% !important;
 }
 .small-note {
     font-size: 14px;
     color: #888;
+}
+
+/* terminal-shell-fixed-064 */
+.terminal-wrap {
+    height: 75vh;
+    min-height: 700px;
+}
+
+#terminal {
+    height: 100%;
+    width: 100%;
+}
+
+#terminal .xterm,
+#terminal .xterm-screen,
+#terminal .xterm-viewport {
+    height: 100% !important;
 }
 </style>
 {% endblock %}
@@ -76,6 +104,35 @@ Keep them disabled unless intentionally testing on a trusted LAN/VPN.
 </div>
 
 <div id="actionOutput" class="msg" style="display:none;"></div>
+
+
+<div class="box">
+<h2>Passwordless Sudo Requirement</h2>
+
+<div class="warning">
+Infrastructure installer buttons use <b>sudo -n</b>. This prevents the web request from hanging on an invisible password prompt.
+For these buttons to work, the Linux user running this panel must be allowed to run the needed sudo commands without an interactive password.
+</div>
+
+<p>For a development VM, the simplest setup is:</p>
+
+<pre><code>sudo visudo</code></pre>
+
+<p>Add this at the bottom, replacing <b>youruser</b> with the Linux username running the web-admin:</p>
+
+<pre><code>youruser ALL=(ALL) NOPASSWD: ALL</code></pre>
+
+<p>Then verify:</p>
+
+<pre><code>sudo -l
+sudo -n true
+sudo -n apt update</code></pre>
+
+<div class="warning">
+Production hardening note: <b>NOPASSWD: ALL</b> is broad. For public/shared environments, replace it with a restricted command allowlist.
+</div>
+</div>
+
 
 <div class="grid">
 
@@ -121,36 +178,69 @@ Enable with <b>ENABLE_STACK_INSTALLER=1</b>.
 
 <form class="installerStepForm">
     <input type="hidden" name="step" value="prereq">
-    <button type="submit">1. Check Prerequisites</button>
+    <button type="submit">0. Check Prerequisites</button>
 </form>
 
 <form class="installerStepForm">
     <input type="hidden" name="step" value="install_base_packages">
-    <button type="submit">2. Install Base Packages</button>
+    <button type="submit">1. Install Base Packages</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="install_docker">
+    <button type="submit">2. Install Docker Engine (Official)</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="install_docker_fallback">
+    <button type="submit">3. Install Docker (Ubuntu Fallback)</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="install_docker_compose_plugin">
+    <button type="submit">4. Install Docker Compose Plugin</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="add_user_to_docker_group">
+    <button type="submit">5. Add User to Docker Group</button>
+</form>
+
+<form class="installerStepForm">
+    <input type="hidden" name="step" value="enable_docker_service">
+    <button type="submit">6. Enable + Start Docker Service</button>
 </form>
 
 <form class="installerStepForm">
     <input type="hidden" name="step" value="clone_or_pull">
-    <button type="submit">3. Clone or Pull RedBlink Stack</button>
+    <button type="submit">7. Clone or Pull RedBlink Stack</button>
 </form>
 
 <form class="installerStepForm">
     <input type="hidden" name="step" value="install_dune_command">
-    <button type="submit">4. Install dune Command</button>
+    <button type="submit">8. Install dune Command</button>
 </form>
 
-<form class="installerStepForm">
-    <input type="hidden" name="step" value="dune_init">
-    <button type="submit">5. Run dune init</button>
-</form>
+<div class="warning">
+    <b>dune init is interactive.</b><br>
+    Use the browser shell or SSH for this step. These buttons open the shell and pre-fill the command.
+</div>
+
+<button type="button" onclick="startTerminalWithCommand('cd {{ redblink_install_dir }} && dune init')">
+    9. Open Shell and Run dune init
+</button>
+
+<button type="button" onclick="startTerminalWithCommand('cd {{ redblink_install_dir }} && dune manager')">
+    Open Shell and Run dune manager
+</button>
 
 <form class="installerStepForm">
     <input type="hidden" name="step" value="docker_ps">
-    <button type="submit">6. Verify Docker Containers</button>
+    <button type="submit">10. Verify Docker Containers</button>
 </form>
 
 <p class="small-note">
-The Funcom self-host token/config flow may still require interactive input during <b>dune init</b>.
+Installer sudo commands use <b>sudo -n</b>. If passwordless sudo is not configured, they will fail cleanly instead of hanging. The Funcom self-host token/config flow is interactive. Use <b>Open Shell and Run dune init</b> or a normal SSH session for that step.
 Use the full shell if the guided step cannot handle the interaction.
 </p>
 </div>
@@ -180,6 +270,7 @@ All commands run with the permissions of the user running this Flask app.
 <script src="/static/dune-admin.js"></script>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.8.0/lib/addon-fit.js"></script>
 
 <script>
 document.querySelectorAll(".infraCommandForm").forEach(form => {
@@ -203,28 +294,126 @@ document.querySelectorAll(".installerStepForm").forEach(form => {
 });
 
 let termStarted = false;
+let terminalSocket = null;
+let terminalRef = null;
+let terminalFitAddon = null;
 
-function startTerminal() {
-    if (termStarted) return;
+function manualFitTerminal() {
+    if (!terminalRef) return;
+
+    const terminalElement = document.getElementById("terminal");
+    if (!terminalElement) return;
+
+    const rect = terminalElement.getBoundingClientRect();
+
+    // Conservative character cell estimates for xterm at fontSize 14.
+    const cols = Math.max(80, Math.floor(rect.width / 8));
+    const rows = Math.max(24, Math.floor(rect.height / 17));
+
+    try {
+        terminalRef.resize(cols, rows);
+
+        if (terminalSocket) {
+            terminalSocket.emit("shell_resize", {
+                cols: cols,
+                rows: rows
+            });
+        }
+    } catch (error) {
+        console.warn("Manual terminal resize failed:", error);
+    }
+}
+
+function fitTerminalSoon(delay = 100) {
+    setTimeout(() => {
+        try {
+            if (terminalFitAddon) {
+                terminalFitAddon.fit();
+
+                if (terminalRef && terminalSocket) {
+                    terminalSocket.emit("shell_resize", {
+                        cols: terminalRef.cols,
+                        rows: terminalRef.rows
+                    });
+                }
+
+                return;
+            }
+        } catch (error) {
+            console.warn("Terminal FitAddon failed, falling back to manual resize:", error);
+        }
+
+        manualFitTerminal();
+    }, delay);
+}
+
+function startTerminalWithCommand(command) {
+    startTerminal(command);
+}
+
+function startTerminal(initialCommand = null) {
+    if (termStarted && terminalSocket && initialCommand) {
+        terminalSocket.emit("shell_input", { data: initialCommand + "\n" });
+        fitTerminalSoon(100);
+        return;
+    }
+
+    if (termStarted) {
+        fitTerminalSoon(100);
+        return;
+    }
+
     termStarted = true;
 
     const term = new Terminal({
         cursorBlink: true,
         convertEol: true,
         fontSize: 14,
+        scrollback: 5000,
         theme: {
             background: "#050505",
-            foreground: "#d8c08a"
+            foreground: "#d8c08a",
+            cursor: "#fff4c2",
+            selectionBackground: "#5c3b18"
         }
     });
 
-    term.open(document.getElementById("terminal"));
+    terminalRef = term;
+
+    try {
+        if (window.FitAddon && window.FitAddon.FitAddon) {
+            terminalFitAddon = new window.FitAddon.FitAddon();
+            term.loadAddon(terminalFitAddon);
+        } else if (typeof FitAddon !== "undefined" && FitAddon.FitAddon) {
+            terminalFitAddon = new FitAddon.FitAddon();
+            term.loadAddon(terminalFitAddon);
+        }
+    } catch (error) {
+        console.warn("FitAddon unavailable, using manual resize fallback:", error);
+        terminalFitAddon = null;
+    }
+
+    const terminalElement = document.getElementById("terminal");
+    term.open(terminalElement);
+
+    fitTerminalSoon(100);
+    fitTerminalSoon(500);
 
     const socket = io();
+    terminalSocket = socket;
 
     socket.on("connect", () => {
-        term.write("[socket connected]\\r\\n");
+        term.write("[socket connected]\r\n");
         socket.emit("shell_start");
+
+        fitTerminalSoon(250);
+        fitTerminalSoon(750);
+
+        if (initialCommand) {
+            setTimeout(() => {
+                socket.emit("shell_input", { data: initialCommand + "\n" });
+            }, 500);
+        }
     });
 
     socket.on("shell_output", msg => {
@@ -232,11 +421,15 @@ function startTerminal() {
     });
 
     socket.on("disconnect", () => {
-        term.write("\\r\\n[socket disconnected]\\r\\n");
+        term.write("\r\n[socket disconnected]\r\n");
     });
 
     term.onData(data => {
         socket.emit("shell_input", { data });
+    });
+
+    window.addEventListener("resize", () => {
+        fitTerminalSoon(100);
     });
 }
 </script>

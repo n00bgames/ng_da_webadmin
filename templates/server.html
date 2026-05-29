@@ -31,6 +31,97 @@
 </div>
 
 </div>
+
+<div class="grid">
+
+<div class="box">
+<h2>Map Runtime Modes</h2>
+
+<div class="warning">
+RedBlink v1.3.2 adds configurable map runtime modes.
+<b>Always-on</b> keeps a map running. <b>Dynamic</b> lets the stack spawn/despawn it as needed.
+Survival_1 and Overmap are protected by the RedBlink stack and should remain always-on.
+</div>
+
+<form class="ajaxForm" data-endpoint="/api/maps-list">
+    <button type="submit">List Maps</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/maps-mode">
+    <button type="submit">Show All Map Modes</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/maps-reconcile">
+    <button type="submit">Reconcile Always-On Maps</button>
+</form>
+
+<h3>Set Map Mode</h3>
+
+{% for map_name in maps %}
+<div class="box">
+    <h3>{{ map_name }}</h3>
+
+    <form class="ajaxForm" data-endpoint="/api/maps-mode">
+        <input type="hidden" name="map_name" value="{{ map_name }}">
+        <button type="submit">Show {{ map_name }} Mode</button>
+    </form>
+
+    <form class="ajaxForm" data-endpoint="/api/maps-set-mode">
+        <input type="hidden" name="map_name" value="{{ map_name }}">
+        <input type="hidden" name="mode" value="always-on">
+        <button type="submit">Set {{ map_name }} Always-On</button>
+    </form>
+
+    <form class="ajaxForm" data-endpoint="/api/maps-set-mode">
+        <input type="hidden" name="map_name" value="{{ map_name }}">
+        <input type="hidden" name="mode" value="dynamic">
+        <button type="submit">Set {{ map_name }} Dynamic</button>
+    </form>
+</div>
+{% endfor %}
+</div>
+
+<div class="box">
+<h2>Deep Desert PvP/PvE Dual Mode</h2>
+
+<div class="warning">
+RedBlink v1.3.2 adds Deep Desert dual mode controls.
+Use status first. Enabling/disabling may modify server configuration and may require map/server restarts depending on stack state.
+</div>
+
+<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
+    <input type="hidden" name="action" value="status">
+    <button type="submit">Deep Desert Dual Status</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
+    <input type="hidden" name="action" value="enable">
+    <button type="submit">Enable Deep Desert PvP/PvE Dual Mode</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
+    <input type="hidden" name="action" value="disable">
+    <button type="submit">Disable Deep Desert Dual Mode</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
+    <input type="hidden" name="action" value="disable_force">
+    <button type="submit">Force Disable Deep Desert Dual Mode</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
+    <input type="hidden" name="action" value="bootstrap">
+    <button type="submit">Bootstrap Deep Desert Dual Mode</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
+    <input type="hidden" name="action" value="repair">
+    <button type="submit">Repair Deep Desert Dual Setup</button>
+</form>
+
+</div>
+
+</div>
 {% endblock %}
 
 {% block scripts %}

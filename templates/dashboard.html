@@ -1,10 +1,156 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 
+{% block head_extra %}
+<style>
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+}
+
+.metric-card {
+    background: #070707;
+    border: 1px solid #2e2416;
+    padding: 18px;
+    box-shadow: 0 0 18px rgba(255,140,0,0.05);
+}
+
+.metric-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: #d8c08a;
+    margin-bottom: 12px;
+}
+
+.metric-value {
+    font-size: 28px;
+    color: #f2e0aa;
+    margin-bottom: 8px;
+}
+
+.metric-sub {
+    color: #aaa;
+    font-size: 14px;
+}
+
+.usage-bar {
+    height: 16px;
+    background: #1a1410;
+    border: 1px solid #403018;
+    border-radius: 999px;
+    overflow: hidden;
+    margin: 10px 0;
+}
+
+.usage-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #3b7d3b, #d4a94d);
+    box-shadow: 0 0 12px rgba(212,169,77,0.35);
+    transition: width 0.35s ease, background 0.35s ease;
+}
+
+.usage-fill.warn {
+    background: linear-gradient(90deg, #9b7a22, #d4a94d);
+}
+
+.usage-fill.danger {
+    background: linear-gradient(90deg, #8b1d12, #ff5c3c);
+    box-shadow: 0 0 14px rgba(255,70,40,0.45);
+}
+
+.metrics-footer {
+    color: #777;
+    font-size: 13px;
+    margin-top: 10px;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>Master Dashboard</h1>
 
-<div class="card-grid">
+<div class="box">
+<h2>System Resources</h2>
+
+<div id="metricsError" class="warning" style="display:none;"></div>
+
+<div class="metric-grid">
+    <div class="metric-card">
+        <div class="metric-title">CPU</div>
+        <div class="metric-value"><span id="cpuPercent">--</span>%</div>
+        <div class="usage-bar">
+            <div id="cpuFill" class="usage-fill"></div>
+        </div>
+        <div class="metric-sub">Host processor usage</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-title">RAM</div>
+        <div class="metric-value"><span id="ramPercent">--</span>%</div>
+        <div class="usage-bar">
+            <div id="ramFill" class="usage-fill"></div>
+        </div>
+        <div class="metric-sub"><span id="ramDetail">-- / --</span></div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-title">Disk</div>
+        <div class="metric-value"><span id="diskPercent">--</span>%</div>
+        <div class="usage-bar">
+            <div id="diskFill" class="usage-fill"></div>
+        </div>
+        <div class="metric-sub"><span id="diskDetail">-- / --</span></div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-title">Network</div>
+        <div class="metric-value">RX <span id="netRxRate">--</span></div>
+        <div class="metric-value">TX <span id="netTxRate">--</span></div>
+        <div class="metric-sub">Totals: RX <span id="netRecvTotal">--</span> / TX <span id="netSentTotal">--</span></div>
+    </div>
+</div>
+
+<div class="metrics-footer">
+    Auto-refreshes every 5 seconds.
+</div>
+</div>
+
+<div class="box">
+<h2>World Summary</h2>
+
+<div id="worldError" class="warning" style="display:none;"></div>
+
+<div class="metric-grid">
+    <div class="metric-card">
+        <div class="metric-title">Total Players</div>
+        <div class="metric-value" id="totalPlayers">--</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-title">Online Players</div>
+        <div class="metric-value" id="onlinePlayers">--</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-title">Total Vehicles</div>
+        <div class="metric-value" id="totalVehicles">--</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-title">Hagga Vehicles</div>
+        <div class="metric-value" id="haggaVehicles">--</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-title">Deep Desert Vehicles</div>
+        <div class="metric-value" id="deepDesertVehicles">--</div>
+    </div>
+</div>
+</div>
+
+<div class="grid">
     <div class="card">
         <h2>Who's Online</h2>
         <p>View online players.</p>
@@ -17,7 +163,6 @@
         <p><a href="/map">Open Live Map</a></p>
     </div>
 
-    {% if session.role != "viewer" %}
     <div class="card">
         <h2>Item Grants</h2>
         <p>Search items, grant items, and grant thopter kits.</p>
@@ -29,9 +174,7 @@
         <p>Spawn maps and restart RedBlink services.</p>
         <p><a href="/server">Open Server Management</a></p>
     </div>
-    {% endif %}
 
-    {% if session.role == "admin" %}
     <div class="card">
         <h2>Admin Panel</h2>
         <p>Run admin-only utilities such as overrepair.</p>
@@ -43,13 +186,99 @@
         <p>Host diagnostics, RedBlink stack installer, and optional browser shell.</p>
         <p><a href="/infrastructure">Open Infrastructure</a></p>
     </div>
-    {% endif %}
 </div>
 
 <div class="box">
 <h2>Version</h2>
 <p>Panel: {{ panel_version }}</p>
-<p>RedBlink Stack Target: {{ redblink_stack_version }}</p>
+<p>RedBlink Stack Target: {{ redblink_version }}</p>
 <p>Role: {{ session.role }}</p>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function classifyUsage(element, percent) {
+    element.classList.remove("warn", "danger");
+
+    if (percent >= 90) {
+        element.classList.add("danger");
+    } else if (percent >= 70) {
+        element.classList.add("warn");
+    }
+}
+
+function setUsage(fillId, percent) {
+    const fill = document.getElementById(fillId);
+    const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+    fill.style.width = `${safePercent}%`;
+    classifyUsage(fill, safePercent);
+}
+
+function setText(id, value) {
+    const node = document.getElementById(id);
+    if (node) node.textContent = value;
+}
+
+async function refreshDashboardMetrics() {
+    try {
+        const response = await fetch("/api/dashboard-metrics");
+        const data = await response.json();
+
+        if (!data.ok) {
+            throw new Error(data.error || "Dashboard metrics failed.");
+        }
+
+        const system = data.system || {};
+        const world = data.world || {};
+
+        const metricsError = document.getElementById("metricsError");
+        const worldError = document.getElementById("worldError");
+
+        if (system.ok) {
+            metricsError.style.display = "none";
+
+            setText("cpuPercent", system.cpu_percent);
+            setUsage("cpuFill", system.cpu_percent);
+
+            setText("ramPercent", system.memory_percent);
+            setText("ramDetail", `${system.memory_used} / ${system.memory_total}`);
+            setUsage("ramFill", system.memory_percent);
+
+            setText("diskPercent", system.disk_percent);
+            setText("diskDetail", `${system.disk_used} / ${system.disk_total}`);
+            setUsage("diskFill", system.disk_percent);
+
+            setText("netRxRate", system.net_rx_rate || "--");
+            setText("netTxRate", system.net_tx_rate || "--");
+            setText("netRecvTotal", system.net_recv || "--");
+            setText("netSentTotal", system.net_sent || "--");
+        } else {
+            metricsError.textContent = system.error || "System metrics unavailable.";
+            metricsError.style.display = "block";
+        }
+
+        if (world.ok) {
+            worldError.style.display = "none";
+
+            setText("totalPlayers", world.total_players);
+            setText("onlinePlayers", world.online_players);
+            setText("totalVehicles", world.total_vehicles);
+            setText("haggaVehicles", world.vehicles_hagga_basin);
+            setText("deepDesertVehicles", world.vehicles_deep_desert);
+        } else {
+            worldError.textContent = world.error || "World metrics unavailable.";
+            worldError.style.display = "block";
+        }
+
+    } catch (error) {
+        const metricsError = document.getElementById("metricsError");
+        metricsError.textContent = error.message;
+        metricsError.style.display = "block";
+    }
+}
+
+refreshDashboardMetrics();
+setInterval(refreshDashboardMetrics, 5000);
+</script>
 {% endblock %}

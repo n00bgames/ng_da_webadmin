@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
 n00bGame's Dune Awakening Web-Admin
-Panel version: 0.5.9-alpha
+Panel version: 0.6.4-alpha
 RedBlink stack compatibility target: v1.3.1
 
-0.5.9-alpha infrastructure build:
-- Adds admin-only Infrastructure page.
-- Adds disabled-by-default host command runner.
-- Adds disabled-by-default full browser shell using Flask-SocketIO + PTY.
-- Adds guided RedBlink self-host stack installer/checker.
-- Adds requirements.txt with optional shell dependencies.
-- Keeps 0.5.8 public alpha game-admin features.
+0.6.4-alpha RedBlink v1.3.2 support:
+- Updates RedBlink stack target to v1.3.2.
+- Adds Server Management controls for dune maps runtime modes.
+- Adds controls for dynamic vs always-on map runtime behavior.
+- Adds map reconcile command.
+- Adds Deep Desert dual PvP/PvE status, enable, disable, bootstrap, and repair controls.
+- Hardens browser shell fitting with FitAddon fallback/manual resize.
 
 SECURITY NOTES
 --------------
@@ -28,7 +28,12 @@ import select
 import shlex
 import signal
 import pty
+import fcntl
+import termios
+import struct
 import threading
+import time
+import psutil
 import re
 from datetime import datetime
 from pathlib import Path
@@ -45,14 +50,14 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # CONFIGURABLE VALUES
 # =========================================================
 
-PANEL_VERSION = "0.5.9-alpha"
-REDBLINK_STACK_VERSION = "v1.3.1"
+PANEL_VERSION = "0.6.4-alpha"
+REDBLINK_STACK_VERSION = "v1.3.2"
 
 # RedBlink stack path. Change this if your install lives elsewhere.
 DUNE_ROOT = Path(
     os.environ.get(
         "DUNE_ROOT",
-        "/home/steihl/dune-awakening-selfhost-docker",
+        str(Path.home() / "dune-awakening-selfhost-docker"),
     )
 )
 
@@ -96,7 +101,7 @@ REDBLINK_REPO_URL = "https://github.com/Red-Blink/dune-awakening-selfhost-docker
 REDBLINK_INSTALL_DIR = Path(
     os.environ.get(
         "REDBLINK_INSTALL_DIR",
-        "/home/steihl/dune-awakening-selfhost-docker",
+        str(Path.home() / "dune-awakening-selfhost-docker"),
     )
 )
 
@@ -190,7 +195,7 @@ MAP_CONFIGS = {
         "max_y": 353821.95,
         "flip_y": False,
         # Confirmed from existing dashboard examples.
-        "default_partition_id": 250100,
+        "default_partition_id": 1,
     },
     "DeepDesert": {
         "key": "DeepDesert",
@@ -205,7 +210,7 @@ MAP_CONFIGS = {
         "flip_y": False,
         # Unknown on this server until tested. Leave blank in the UI
         # unless you confirm the correct partition id.
-        "default_partition_id": "",
+        "default_partition_id": "8",
     },
 }
 
@@ -1055,28 +1060,97 @@ def installer_step_command(step):
             "timeout": 30,
             "custom": prereq_report,
         },
+
         "install_base_packages": {
-            "cmd": ["bash", "-lc", "sudo apt update && sudo apt install -y git curl ca-certificates"],
+            "cmd": [
+                "bash",
+                "-lc",
+                "sudo -n apt update && sudo -n apt install -y git curl ca-certificates apt-transport-https software-properties-common"
+            ],
             "timeout": 300,
         },
+
+        "install_docker": {
+            "cmd": [
+                "bash",
+                "-lc",
+                "curl -fsSL https://get.docker.com | sudo -n sh"
+            ],
+            "timeout": 900,
+        },
+
+        "install_docker_fallback": {
+            "cmd": [
+                "bash",
+                "-lc",
+                "sudo -n apt update && sudo -n apt install -y docker.io docker-compose-plugin && sudo -n systemctl enable --now docker"
+            ],
+            "timeout": 900,
+        },
+
+        "install_docker_compose_plugin": {
+            "cmd": [
+                "bash",
+                "-lc",
+                "sudo -n apt update && sudo -n apt install -y docker-compose-plugin"
+            ],
+            "timeout": 300,
+        },
+
+        "add_user_to_docker_group": {
+            "cmd": [
+                "bash",
+                "-lc",
+                "sudo -n usermod -aG docker $USER && echo 'User added to docker group. Logout/login or reboot may be required.'"
+            ],
+            "timeout": 60,
+        },
+
+        "enable_docker_service": {
+            "cmd": [
+                "bash",
+                "-lc",
+                "sudo -n systemctl enable --now docker && systemctl status docker --no-pager || true"
+            ],
+            "timeout": 60,
+        },
+
         "clone_or_pull": {
-            "cmd": ["bash", "-lc", f"mkdir -p {parent_dir} && if [ -d {install_dir}/.git ]; then cd {install_dir} && git pull; else git clone {repo_url} {install_dir}; fi"],
+            "cmd": [
+                "bash",
+                "-lc",
+                f"mkdir -p {parent_dir} && if [ -d {install_dir}/.git ]; then cd {install_dir} && git pull; else git clone {repo_url} {install_dir}; fi"
+            ],
             "timeout": 300,
         },
+
         "install_dune_command": {
-            "cmd": ["bash", "-lc", f"cd {install_dir} && sudo runtime/scripts/install-command.sh"],
+            "cmd": [
+                "bash",
+                "-lc",
+                f"cd {install_dir} && sudo -n runtime/scripts/install-command.sh"
+            ],
             "timeout": 300,
         },
+
         "dune_init": {
-            "cmd": ["bash", "-lc", f"cd {install_dir} && dune init"],
+            "cmd": [
+                "bash",
+                "-lc",
+                f"cd {install_dir} && dune init"
+            ],
             "timeout": 600,
         },
+
         "docker_ps": {
-            "cmd": ["bash", "-lc", "docker ps"],
+            "cmd": [
+                "bash",
+                "-lc",
+                "docker ps"
+            ],
             "timeout": 30,
         },
     }
-
     return commands.get(step)
 
 
@@ -1137,6 +1211,176 @@ def stop_shell_session(sid):
     except Exception:
         pass
 
+
+
+
+
+# =========================================================
+# DASHBOARD RESOURCE HELPERS
+# =========================================================
+
+_LAST_NET_SAMPLE = {
+    "timestamp": None,
+    "bytes_sent": None,
+    "bytes_recv": None,
+}
+
+def bytes_to_human(value):
+    try:
+        value = float(value)
+    except Exception:
+        return "0 B"
+
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    idx = 0
+
+    while value >= 1024 and idx < len(units) - 1:
+        value /= 1024
+        idx += 1
+
+    return f"{value:.1f} {units[idx]}"
+
+
+def get_system_resource_summary():
+    """
+    Return host-level resource metrics for the dashboard.
+
+    Network totals are reported since boot. RX/TX rates are estimated from
+    the previous API sample and become meaningful after the second refresh.
+    """
+    global _LAST_NET_SAMPLE
+
+    try:
+        now = time.time()
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage("/")
+        net = psutil.net_io_counters()
+
+        rx_rate = 0
+        tx_rate = 0
+
+        if (
+            _LAST_NET_SAMPLE["timestamp"] is not None
+            and _LAST_NET_SAMPLE["bytes_recv"] is not None
+            and _LAST_NET_SAMPLE["bytes_sent"] is not None
+        ):
+            elapsed = max(now - _LAST_NET_SAMPLE["timestamp"], 0.001)
+            rx_rate = max((net.bytes_recv - _LAST_NET_SAMPLE["bytes_recv"]) / elapsed, 0)
+            tx_rate = max((net.bytes_sent - _LAST_NET_SAMPLE["bytes_sent"]) / elapsed, 0)
+
+        _LAST_NET_SAMPLE = {
+            "timestamp": now,
+            "bytes_sent": net.bytes_sent,
+            "bytes_recv": net.bytes_recv,
+        }
+
+        return {
+            "ok": True,
+            "cpu_percent": round(cpu_percent, 1),
+            "memory_percent": round(memory.percent, 1),
+            "memory_used": bytes_to_human(memory.used),
+            "memory_total": bytes_to_human(memory.total),
+            "disk_percent": round(disk.percent, 1),
+            "disk_used": bytes_to_human(disk.used),
+            "disk_total": bytes_to_human(disk.total),
+            "net_sent": bytes_to_human(net.bytes_sent),
+            "net_recv": bytes_to_human(net.bytes_recv),
+            "net_rx_rate": bytes_to_human(rx_rate) + "/s",
+            "net_tx_rate": bytes_to_human(tx_rate) + "/s",
+        }
+
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+        }
+
+
+def get_world_summary_counts():
+    """
+    Return basic world/server counts for the dashboard.
+
+    Fails gracefully if the RedBlink stack/Postgres container is not running.
+    """
+    sql = r"""
+    WITH player_counts AS (
+        SELECT
+            COUNT(*) AS total_players,
+            COUNT(*) FILTER (WHERE online_status::text <> 'Offline') AS online_players
+        FROM dune.player_state
+    ),
+    vehicle_counts AS (
+        SELECT
+            COUNT(*) FILTER (WHERE a.map = 'HaggaBasin') AS vehicles_hagga_basin,
+            COUNT(*) FILTER (WHERE a.map = 'DeepDesert') AS vehicles_deep_desert,
+            COUNT(*) AS total_vehicles
+        FROM dune.vehicles v
+        JOIN dune.actors a
+            ON a.id = v.id
+    )
+    SELECT
+        pc.total_players,
+        pc.online_players,
+        vc.total_vehicles,
+        vc.vehicles_hagga_basin,
+        vc.vehicles_deep_desert
+    FROM player_counts pc
+    CROSS JOIN vehicle_counts vc;
+    """
+
+    cmd = [
+        "docker", "exec", POSTGRES_CONTAINER,
+        "psql", "-U", "dune", "-d", "dune",
+        "-At", "-F", "\t", "-c", sql,
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+
+        if proc.returncode != 0:
+            return {
+                "ok": False,
+                "error": proc.stderr.strip() or "world count query failed",
+            }
+
+        line = proc.stdout.strip().splitlines()[0] if proc.stdout.strip() else ""
+        parts = line.split("\t")
+
+        if len(parts) < 5:
+            return {
+                "ok": False,
+                "error": "unexpected world count output",
+            }
+
+        return {
+            "ok": True,
+            "total_players": parts[0],
+            "online_players": parts[1],
+            "total_vehicles": parts[2],
+            "vehicles_hagga_basin": parts[3],
+            "vehicles_deep_desert": parts[4],
+        }
+
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc),
+        }
+
+
+def build_dashboard_metrics_payload():
+    return {
+        "ok": True,
+        "system": get_system_resource_summary(),
+        "world": get_world_summary_counts(),
+    }
 
 
 # =========================================================
@@ -1241,7 +1485,14 @@ def account():
 def dashboard():
     if not logged_in():
         return redirect("/login")
-    return render_template("dashboard.html")
+
+    metrics = build_dashboard_metrics_payload()
+
+    return render_template(
+        "dashboard.html",
+        system_summary=metrics["system"],
+        world_summary=metrics["world"],
+    )
 
 
 @app.route("/online")
@@ -1595,6 +1846,15 @@ def api_installer_step():
 
 
 
+
+@app.route("/api/dashboard-metrics")
+def api_dashboard_metrics():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    return jsonify(build_dashboard_metrics_payload())
+
+
 @app.route("/api/logs")
 def api_logs():
     if not logged_in():
@@ -1770,6 +2030,111 @@ def api_restart_target():
         return jsonify({"ok": False, "error": f"Restart failed: {exc}"}), 500
 
 
+@app.route("/api/maps-list", methods=["POST"])
+def api_maps_list():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+    if not is_operator_or_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    try:
+        output = run_command([str(DUNE_SCRIPT), "maps", "list"], timeout=60)
+        log_action(session["user"], "dune maps list")
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Map list failed: {exc}"}), 500
+
+
+@app.route("/api/maps-mode", methods=["POST"])
+def api_maps_mode():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+    if not is_operator_or_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    map_name = request.form.get("map_name", "").strip()
+
+    try:
+        cmd = [str(DUNE_SCRIPT), "maps", "mode"]
+        if map_name:
+            cmd.append(map_name)
+        output = run_command(cmd, timeout=60)
+        log_action(session["user"], f"dune maps mode {map_name or 'all'}")
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Map mode failed: {exc}"}), 500
+
+
+@app.route("/api/maps-set-mode", methods=["POST"])
+def api_maps_set_mode():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+    if not is_operator_or_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    map_name = request.form.get("map_name", "").strip()
+    mode = request.form.get("mode", "").strip()
+
+    if not map_name:
+        return jsonify({"ok": False, "error": "missing map name"}), 400
+
+    if mode not in ("dynamic", "always-on"):
+        return jsonify({"ok": False, "error": "invalid map mode"}), 400
+
+    try:
+        output = run_command([str(DUNE_SCRIPT), "maps", "set", map_name, mode], timeout=120)
+        log_action(session["user"], f"dune maps set {map_name} {mode}")
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Map set failed: {exc}"}), 500
+
+
+@app.route("/api/maps-reconcile", methods=["POST"])
+def api_maps_reconcile():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+    if not is_operator_or_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    try:
+        output = run_command([str(DUNE_SCRIPT), "maps", "reconcile"], timeout=180)
+        log_action(session["user"], "dune maps reconcile")
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Map reconcile failed: {exc}"}), 500
+
+
+@app.route("/api/deepdesert-dual", methods=["POST"])
+def api_deepdesert_dual():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+    if not is_operator_or_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    action = request.form.get("action", "").strip()
+
+    allowed = {
+        "status": [str(DUNE_SCRIPT), "deepdesert", "dual", "status"],
+        "enable": [str(DUNE_SCRIPT), "deepdesert", "dual", "enable", "--yes"],
+        "disable": [str(DUNE_SCRIPT), "deepdesert", "dual", "disable", "--yes"],
+        "disable_force": [str(DUNE_SCRIPT), "deepdesert", "dual", "disable", "--force", "--yes"],
+        "bootstrap": [str(DUNE_SCRIPT), "deepdesert", "dual", "bootstrap", "--yes"],
+        "repair": [str(DUNE_SCRIPT), "deepdesert", "dual", "repair"],
+    }
+
+    cmd = allowed.get(action)
+    if not cmd:
+        return jsonify({"ok": False, "error": "invalid Deep Desert dual action"}), 400
+
+    try:
+        output = run_command(cmd, timeout=300)
+        log_action(session["user"], f"dune deepdesert dual {action}")
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Deep Desert dual command failed: {exc}"}), 500
+
+
+
 
 # =========================================================
 # SOCKET.IO HOST SHELL
@@ -1810,8 +2175,24 @@ def socket_shell_input(message):
 
 @socketio.on("shell_resize")
 def socket_shell_resize(message):
-    # Placeholder for future terminal resize support.
-    return
+    if not logged_in() or not is_admin() or not ENABLE_HOST_SHELL:
+        disconnect()
+        return
+
+    session_obj = SHELL_SESSIONS.get(request.sid)
+    if not session_obj:
+        return
+
+    try:
+        rows = int(message.get("rows", 24))
+        cols = int(message.get("cols", 80))
+        rows = max(10, min(rows, 200))
+        cols = max(40, min(cols, 400))
+
+        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+        fcntl.ioctl(session_obj["fd"], termios.TIOCSWINSZ, winsize)
+    except Exception:
+        return
 
 
 @socketio.on("disconnect")
