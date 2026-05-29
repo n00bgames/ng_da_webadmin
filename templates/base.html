@@ -2,6 +2,9 @@
 <html>
 <head>
 <title>{% block title %}n00bGame's Dune Awakening Web-Admin{% endblock %}</title>
+<link rel="icon" href="/static/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
 
 <style>
 body {
@@ -219,7 +222,7 @@ a:hover {
     <a href="/infrastructure">Infrastructure</a>
     <a href="/users">Users</a>
     {% endif %}
-    {% if session.role != "viewer" %}
+    {% if session.role == "admin" %}
     <a href="/logs">Logs</a>
     {% endif %}
     <a href="/account">My Account</a>

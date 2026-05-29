@@ -1,201 +1,318 @@
-Dune Admin Web App 0.6.4-alpha
-================================
+n00bGame's Dune Awakening Web-Admin
+===================================
 
-Public demonstration / RedBlink review build.
+Companion administration platform for RedBlink's Dune Awakening
+self-hosted Docker stack.
 
-This is an alpha companion web panel for RedBlink's Dune Awakening self-hosted Docker stack.
+Status
+------
 
-IMPORTANT SECURITY NOTES
-------------------------
-- LAN/private use only.
-- Do not expose directly to the public internet.
-- Use a reverse proxy, HTTPS, and additional auth before any wider exposure.
-- This panel can grant items, restart services, run direct SQL utilities, repair vehicles, and teleport offline characters.
-- Direct SQL tools are intentionally restricted and should be treated as sharp objects.
+Panel version: 0.6.5-rc1
+Target RedBlink Stack: v1.3.2
+License: GPLv3
+Platform: Linux
+Python: 3.11+
 
-TESTED FEATURES
----------------
-- Login and first-run admin setup
-- Role separation: viewer / operator / admin
-- Viewer-safe Who's Online list
-- Viewer-safe Hagga Basin map preview
-- Item search and grants
+This release candidate is intended for private/LAN/VPN-hosted
+self-hosted servers.
+
+
+Security Notes
+--------------
+
+- LAN/private/VPN use only.
+- Do not expose this panel directly to the public internet.
+- Use a reverse proxy, HTTPS, and additional authentication before any
+  wider exposure.
+- The panel can grant items, restart services, run database utilities,
+  repair vehicles, teleport offline characters, and optionally open a
+  browser-based host shell.
+- Direct SQL and host shell features are intentionally admin-only and
+  should be treated as high-trust tools.
+- Viewer accounts are intentionally privacy-limited. They can see
+  viewer-safe status, online player names, and map markers, but they
+  cannot view sensitive database identifiers such as raw player IDs,
+  account IDs, FLS IDs, Funcom IDs, direct logs, or admin database
+  output.
+
+
+Features
+--------
+
+Dashboard:
+- Live CPU/RAM/Disk usage bars
+- Network RX/TX statistics
+- AJAX auto-refresh
+- World/player/vehicle summary cards
+
+Live Maps:
+- Hagga Basin live map
+- Deep Desert map support
+- Player/vehicle/base markers
+- Mouse-wheel zoom
+- Drag panning
+- Click-to-fill teleport coordinates
+
+Teleportation:
+- Offline teleportation
+- Character dropdown targeting
+- Emergency return to safe Hagga Basin point
+- Hagga Basin partition: 1
+- Deep Desert partition: 8
+
+Vehicle Teleport:
+- Admin-only vehicle relocation using dune.actors
+- Preserves existing vehicle rotation while updating map, partition, and XYZ
+- Supported actor families: Ornithopter, Sandbike, Buggy, TreadWheel, SandCrawler
+- Zoomable, draggable admin vehicle map with double-click coordinate targeting
+- Requires restarting the affected map/server instance before loaded vehicles
+  appear at the new location
+- Z-axis warning because below-terrain values can place vehicles underground
+
+Item Grants:
+- Item search
+- Item grant tools
 - Mk6 Scout Ornithopter grant
-- Mk6 Medium Ornithopter kit grant
-- Live map with Hagga Basin and Deep Desert tabs
-- Mouse-wheel zoom and click-drag pan
-- Click map to populate teleport target coordinates
-- Offline teleport
-- Emergency Return to Safe Hagga Basin Point
-- Action logs
-- Server restart/map spawn controls
-- Vehicle module repair at sane default value
+- Mk6 Medium Ornithopter grant
+- Medium thopter kit includes 250 rockets
 
-KNOWN RISKS / ALPHA LIMITATIONS
--------------------------------
-- Teleport is intended for offline characters.
-- Vehicle repair writes directly to dune.vehicle_modules stats JSON.
-- Gear overrepair requires items to be unequipped and in inventory.
-- Deep Desert teleport partition should be verified on each stack/server setup.
-- Map images are local assets and are not included unless explicitly copied in.
-- This is not an official RedBlink release unless RedBlink accepts/blesses it.
-
-REQUIRED LOCAL ASSETS
----------------------
-Place these files in ./static:
-
-- dune-admin.png
-- arrakis_hb.webp
-- deep_desert.webp
-
-EXPECTED LAYOUT
----------------
-~/dune-admin-web/
-├── app.py
-├── templates/
-├── static/
-│   ├── dune-admin.js
-│   ├── dune-admin.png
-│   ├── arrakis_hb.webp
-│   └── deep_desert.webp
-├── users.db
-├── logs/
-└── venv/
-
-INSTALL / UPDATE NOTES
-----------------------
-Before replacing your running copy:
-
-cp -a ~/dune-admin-web ~/dune-admin-web.backup-before-0.5.8
-
-Then copy app.py, templates/, and static/dune-admin.js from this package.
-
-Preserve:
-- users.db
-- logs/
-- static/dune-admin.png
-- static/arrakis_hb.webp
-- static/deep_desert.webp
-
-VERSION
--------
-Panel: 0.6.4-alpha
-Target RedBlink Stack: v1.3.1
-
-
-0.5.9-alpha INFRASTRUCTURE FEATURES
------------------------------------
-New admin-only infrastructure page:
-
-- Host command runner
-- Guided RedBlink stack installer
-- Optional full browser shell
-
-These features are disabled by default.
-
-Enable intentionally with environment variables:
-
-export ENABLE_HOST_COMMAND_RUNNER=1
-export ENABLE_STACK_INSTALLER=1
-export ENABLE_HOST_SHELL=1
-
-Optional install target override:
-
-export REDBLINK_INSTALL_DIR=/home/steihl/dune-awakening-selfhost-docker
-
-WARNING:
-The full host shell runs with the permissions of the user running app.py.
-Treat it as equivalent to SSH access to the VM host.
-
-
-0.5.9.1-alpha PATCH NOTES
--------------------------
-- Installer commands now use sudo -n to avoid hanging on sudo password prompts.
-- Added installer steps/buttons for:
-  - base packages
-  - official Docker install
-  - Ubuntu Docker fallback
-  - Docker Compose plugin
-  - Docker group membership
-  - Docker service enable/start
-
-NOTE:
-For web-triggered installer steps that require sudo, configure passwordless sudo
-for trusted admins or run the app under an account that can execute the required
-commands without an interactive password prompt.
-
-
-0.6.0-alpha PATCH NOTES
------------------------
-- dune init is now treated as an interactive shell workflow.
-- Added Infrastructure buttons:
-  - Open Shell and Run dune init
-  - Open Shell and Run dune manager
-- Removed the misleading non-interactive dune init installer flow from the UI.
-- Included GPLv3 LICENSE in the release package.
-
-NOTE:
-Host Shell must be enabled with:
-
-export ENABLE_HOST_SHELL=1
-
-The shell runs as the same Linux user that launches app.py.
-
-
-0.6.1-alpha PATCH NOTES
------------------------
-- Doubled host shell console height.
-- Added Infrastructure passwordless sudo / visudo placard.
-- Added dashboard system resource panel:
-  - CPU usage
-  - RAM usage
-  - disk usage
-  - network sent/received since boot
-- Added dashboard world summary:
-  - total players
-  - online players
-  - total vehicles
-  - vehicles in Hagga Basin
-  - vehicles in Deep Desert
-- Added psutil dependency.
-
-
-0.6.2-alpha PATCH NOTES
------------------------
-- Added /api/dashboard-metrics.
-- Dashboard CPU/RAM/Disk now render as graphical usage bars.
-- Dashboard metrics refresh by AJAX every 5 seconds.
-- Network panel now shows RX/TX rate plus totals.
-- World summary cards refresh live with dashboard metrics.
-
-
-0.6.2.1-alpha PATCH NOTES
--------------------------
-- Reduced live map marker/blip size by 50% for better map readability.
-- Reduced Who's Online Hagga Basin preview markers by 50%.
-
-
-0.6.3-alpha PATCH NOTES
------------------------
-- Added xterm.js FitAddon for the host shell.
-- Host shell now fills the available terminal panel instead of rendering as a tiny viewport.
-- Terminal refits after startup and browser resize.
-
-
-0.6.4-alpha PATCH NOTES
------------------------
-- Target RedBlink stack updated to v1.3.2.
-- Added Server Management controls for:
+Server Management:
+- Grouped restart controls
+- Gameplay services: Survival, Deep Desert, Overmap
+- Infrastructure services: Gateway, Director, Text Router
+- Map spawn controls
+- RedBlink v1.3.2 map runtime controls:
   - dune maps list
   - dune maps mode
   - dune maps set <map> dynamic
   - dune maps set <map> always-on
   - dune maps reconcile
-- Added Deep Desert dual PvP/PvE controls:
-  - status
-  - enable
-  - disable
-  - force disable
-  - bootstrap
-  - repair
-- Hardened browser shell fitting with FitAddon fallback/manual resize.
+
+Deep Desert:
+- Dual PvP/PvE status
+- Enable dual mode
+- Disable dual mode
+- Force disable dual mode
+- Bootstrap dual mode
+- Repair dual mode
+
+Database Tools:
+- DB Health
+- DB Status
+- List Backups
+- Create Backup
+
+Restore/import/delete database actions are intentionally not exposed yet.
+
+Infrastructure:
+- Host diagnostics
+- Docker diagnostics
+- Guided RedBlink installer
+- Browser-based host shell
+- Open Shell + dune init
+- Open Shell + dune manager
+
+
+Requirements
+------------
+
+sudo apt update
+sudo apt install -y python3 python3-pip python3-venv git curl
+
+
+Installation
+------------
+
+git clone https://github.com/n00bgames/ng_da_webadmin.git
+cd ng_da_webadmin
+
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+chmod +x setup.sh
+./setup.sh
+
+chmod +x start.sh restart.sh shutdown.sh
+./start.sh
+
+Browse to:
+
+http://127.0.0.1:8088
+
+
+Runtime Control
+---------------
+
+./start.sh --screen       # detached GNU screen session
+./start.sh --headless     # nohup background process with webadmin.pid
+./restart.sh              # restarts using the detected/current launch mode
+./shutdown.sh             # stops screen or headless mode
+
+For screen mode:
+
+screen -r dune-admin-web
+
+Detach from screen with Ctrl+A, then D.
+
+
+Line Endings
+------------
+
+The repository includes .gitattributes rules to keep Linux shell scripts
+using LF line endings.
+
+If shell scripts still fail with "cannot execute: required file not found"
+or "/bin/bash^M", run:
+
+find . -type f -name "*.sh" -exec sed -i 's/\r$//' {} \;
+chmod +x setup.sh start.sh restart.sh shutdown.sh
+
+
+Configuration
+-------------
+
+Default RedBlink stack path:
+
+~/dune-awakening-selfhost-docker
+
+Override with:
+
+export DUNE_ROOT=/path/to/dune-awakening-selfhost-docker
+
+Set a real secret before sharing or deploying:
+
+export DUNE_SECRET_KEY='long-random-string'
+
+Optional high-trust infrastructure features:
+
+export ENABLE_HOST_COMMAND_RUNNER=1
+export ENABLE_STACK_INSTALLER=1
+export ENABLE_HOST_SHELL=1
+
+Optional RedBlink installer target override:
+
+export REDBLINK_INSTALL_DIR=/path/to/dune-awakening-selfhost-docker
+
+
+Runtime Assets
+--------------
+
+Runtime assets live in ./static:
+
+- dune-admin.js
+- dune-admin.png
+- dune-admin-large.png
+- arrakis_hb.webp
+- deep_desert.webp
+
+The map image files are required for the live map pages to render
+properly.
+
+
+GitHub / README Images
+----------------------
+
+Documentation and GitHub page images live in ./images:
+
+- dashboard.png
+- dune-manager.png
+- infrastructure.png
+- live-map.png
+- logo.png
+
+When dashboard, live map, infrastructure, or GitHub README sections
+change, remember to refresh the matching images before publishing.
+
+
+Expected Layout
+---------------
+
+~/dune-admin-web/
+|-- app.py
+|-- requirements.txt
+|-- setup.sh
+|-- start.sh
+|-- restart.sh
+|-- shutdown.sh
+|-- README.md
+|-- README.txt
+|-- LICENSE
+|-- templates/
+|-- static/
+|   |-- dune-admin.js
+|   |-- dune-admin.png
+|   |-- dune-admin-large.png
+|   |-- arrakis_hb.webp
+|   `-- deep_desert.webp
+|-- images/
+|   |-- dashboard.png
+|   |-- dune-manager.png
+|   |-- infrastructure.png
+|   |-- live-map.png
+|   `-- logo.png
+|-- users.db
+|-- logs/
+`-- venv/
+
+
+Upgrade Notes
+-------------
+
+Before replacing a running copy:
+
+cp -a ~/dune-admin-web ~/dune-admin-web.backup-before-0.6.5-rc1
+
+Preserve local runtime data:
+
+- users.db
+- logs/
+- .env, if used
+
+After updating:
+
+git pull
+source venv/bin/activate
+pip install -r requirements.txt
+./start.sh
+
+
+Known Issues
+------------
+
+- Map marker styling is functional but still being refined.
+- Autoscaler controls are planned.
+- VIP role is planned for a later release.
+- Vehicle repair writes directly to dune.vehicle_modules stats JSON.
+- Vehicle teleport writes to dune.actors, but loaded vehicle actors do not
+  reload their transform until the affected map/server instance restarts.
+- Gear overrepair requires items to be unequipped and in inventory.
+- Deep Desert teleport partition should be verified on each stack/server
+  setup.
+
+
+Planned
+-------
+
+- VIP role
+- VIP self-only teleport
+- VIP self-only item grants
+- VIP self-only thopter grants
+- Vehicle ownership discovery for VIP self-repair
+- Live map side panel / scroll-safe layout
+- Autoscaler controls
+- Dynamic map discovery from RedBlink map runtime config
+
+
+Credits
+-------
+
+- RedBlink and contributors
+- Funcom
+- Community researchers and testers
+
+
+License
+-------
+
+GPLv3. See LICENSE.

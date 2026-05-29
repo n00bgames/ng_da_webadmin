@@ -18,11 +18,15 @@
 
 .map-frame {
     position: relative;
-    height: 78vh;
+    width: min(100%, 1176px);
+    height: 75.6vh;
+    min-height: 420px;
+    max-height: calc(100vh - 1in);
     overflow: auto;
     background: #020202;
     border: 1px solid #333;
     cursor: grab;
+    overscroll-behavior: contain;
 }
 
 .map-frame.dragging {
@@ -51,8 +55,8 @@
 
 .map-marker {
     position: absolute;
-    width: 18px;
-    height: 18px;
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     border: 2px solid #000;
     transform: translate(-50%, -50%);
@@ -76,8 +80,8 @@
 }
 
 .map-marker:hover {
-    width: 24px;
-    height: 24px;
+    width: 12px;
+    height: 12px;
     z-index: 10;
 }
 
@@ -146,6 +150,13 @@
     .map-layout {
         grid-template-columns: 1fr;
     }
+
+    .map-frame {
+        width: 100%;
+        height: 50vh;
+        min-height: 340px;
+        max-height: none;
+    }
 }
 </style>
 {% endblock %}
@@ -157,7 +168,8 @@
 Map assets expected:<br>
 - <b>/static/arrakis_hb.webp</b> for Hagga Basin<br>
 - <b>/static/deep_desert.webp</b> for Deep Desert<br><br>
-Markers come from <b>dune.actors.transform</b>. Teleport uses <b>dune.admin_move_offline_player_to_partition</b> and is admin-only/offline-player oriented.
+Markers come from <b>dune.actors.transform</b>. Teleport uses <b>dune.admin_move_offline_player_to_partition</b> and is admin-only/offline-player oriented.<br><br>
+Scroll normally to move down the page. Hold <b>Ctrl</b> on Windows/Linux or <b>Command</b> on macOS while using the mouse wheel to zoom the map.
 </div>
 
 <div class="map-layout">
@@ -170,8 +182,8 @@ Markers come from <b>dune.actors.transform</b>. Teleport uses <b>dune.admin_move
     <button type="button" onclick="refreshMapMarkers()">Refresh Map</button>
 
     <label>Zoom</label>
-    <input id="mapZoom" type="range" min="5" max="100" value="18" oninput="setMapZoomFromSlider()">
-    <div id="zoomReadout">18%</div>
+    <input id="mapZoom" type="range" min="5" max="100" value="14" oninput="setMapZoomFromSlider()">
+    <div id="zoomReadout">14%</div>
 
     <div class="coord-box" id="mapSummary">
         Loading markers...
@@ -238,7 +250,7 @@ const mapConfigs = {{ map_configs|tojson }};
 let selectedMapKey = "{{ default_map_key }}";
 let mapConfig = mapConfigs[selectedMapKey];
 let mapMarkers = [];
-let currentZoom = 0.18;
+let currentZoom = 0.14;
 let teleportCharacters = [];
 let isDraggingMap = false;
 let dragStartX = 0;
@@ -387,6 +399,16 @@ function wireMapMouseControls() {
     if (!frame) return;
 
     frame.addEventListener("wheel", function(event) {
+        if (!event.ctrlKey && !event.metaKey) {
+            event.preventDefault();
+            window.scrollBy({
+                top: event.deltaY,
+                left: event.deltaX,
+                behavior: "auto"
+            });
+            return;
+        }
+
         event.preventDefault();
 
         const zoomStep = event.deltaY < 0 ? 1.12 : 0.88;

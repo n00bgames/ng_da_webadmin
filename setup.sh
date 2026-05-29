@@ -9,19 +9,19 @@ echo
 read -p "Linux username running the web admin: " WEBADMIN_USER
 
 if [ -z "$WEBADMIN_USER" ]; then
-echo "No username supplied."
-exit 1
+    echo "No username supplied."
+    exit 1
 fi
 
 if ! id "$WEBADMIN_USER" >/dev/null 2>&1; then
-echo "User '$WEBADMIN_USER' does not exist."
-exit 1
+    echo "User '$WEBADMIN_USER' does not exist."
+    exit 1
 fi
 
 SUDOERS_FILE="/etc/sudoers.d/dune-web-admin"
 
 echo
-echo "Creating sudoers entry for:"
+echo "Creating restricted sudoers entry for:"
 echo "  $WEBADMIN_USER"
 echo
 
@@ -44,9 +44,9 @@ echo "Validating sudoers configuration..."
 sudo visudo -c
 
 if [ $? -ne 0 ]; then
-echo
-echo "ERROR: sudoers validation failed."
-exit 1
+    echo
+    echo "ERROR: sudoers validation failed."
+    exit 1
 fi
 
 echo
@@ -56,8 +56,8 @@ echo "  $SUDOERS_FILE"
 echo
 echo "Testing permissions..."
 
-sudo -n apt --version >/dev/null && echo "✓ apt OK"
-sudo -n docker version >/dev/null 2>&1 && echo "✓ docker OK"
+sudo -n apt --version >/dev/null && echo "apt OK"
+sudo -n docker version >/dev/null 2>&1 && echo "docker OK"
 
 echo
 echo "Setup complete."

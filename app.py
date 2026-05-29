@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 n00bGame's Dune Awakening Web-Admin
-Panel version: 0.6.4-alpha
-RedBlink stack compatibility target: v1.3.1
+Panel version: 0.6.5-rc1
+RedBlink stack compatibility target: v1.3.2
 
-0.6.4-alpha RedBlink v1.3.2 support:
+0.6.5-rc1 RedBlink v1.3.2 support:
 - Updates RedBlink stack target to v1.3.2.
 - Adds Server Management controls for dune maps runtime modes.
 - Adds controls for dynamic vs always-on map runtime behavior.
@@ -50,7 +50,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 # CONFIGURABLE VALUES
 # =========================================================
 
-PANEL_VERSION = "0.6.4-alpha"
+PANEL_VERSION = "0.6.5-rc1"
 REDBLINK_STACK_VERSION = "v1.3.2"
 
 # RedBlink stack path. Change this if your install lives elsewhere.
@@ -148,6 +148,12 @@ RESTART_TARGETS = [
     "overmap",
 ]
 
+INFRASTRUCTURE_RESTART_TARGETS = {
+    "gateway",
+    "director",
+    "text-router",
+}
+
 # RedBlink built-in template alias.
 SCOUT_THOPTER_TEMPLATE = "scout-ornithopter-mk6"
 
@@ -195,7 +201,7 @@ MAP_CONFIGS = {
         "max_y": 353821.95,
         "flip_y": False,
         # Confirmed from existing dashboard examples.
-        "default_partition_id": 1,
+        "default_partition_id": 250100,
     },
     "DeepDesert": {
         "key": "DeepDesert",
@@ -210,11 +216,32 @@ MAP_CONFIGS = {
         "flip_y": False,
         # Unknown on this server until tested. Leave blank in the UI
         # unless you confirm the correct partition id.
-        "default_partition_id": "8",
+        "default_partition_id": "",
     },
 }
 
 DEFAULT_MAP_KEY = "HaggaBasin"
+
+# Vehicle relocation does not use MAP_CONFIGS default_partition_id
+# because those map defaults are tuned for marker/teleport UI behavior and
+# Hagga Basin's marker partition differs from the known safe gameplay partition.
+# If your stack uses different vehicle partitions, adjust these two values.
+ORNITHOPTER_PARTITION_DEFAULTS = {
+    "HaggaBasin": 1,
+    "DeepDesert": 8,
+}
+
+# Vehicle actor class patterns confirmed from exported dune.actors rows.
+# Add newly discovered vehicle blueprint name fragments here before exposing
+# them in the admin-only teleport UI. The SQL allow-list deliberately stays
+# explicit so unrelated actors with transforms do not appear as movable vehicles.
+TELEPORTABLE_VEHICLE_CLASS_PATTERNS = [
+    "Ornithopter",
+    "Sandbike",
+    "Buggy",
+    "TreadWheel",
+    "SandCrawler",
+]
 
 # Emergency unstuck target.
 # This should be a known-safe location in Hagga Basin. It is used by
@@ -537,6 +564,8 @@ def get_vehicles():
        OR a.class ILIKE '%Ornithopter%'
        OR a.class ILIKE '%Sandbike%'
        OR a.class ILIKE '%Buggy%'
+       OR a.class ILIKE '%TreadWheel%'
+       OR a.class ILIKE '%SandCrawler%'
     GROUP BY a.id, a.class
     ORDER BY a.id;
     """
@@ -754,6 +783,225 @@ def parse_transform(transform_value):
         "y": float(match.group(2)),
         "z": float(match.group(3)),
     }
+
+
+def parse_transform_rotation(transform_value):
+    """
+    Return the rotation tuple text from an actor transform.
+
+    Observed format:
+        ("(X,Y,Z)","(QX,QY,QZ,QW)")
+
+    Vehicle relocation preserves rotation and only changes position.
+    """
+    if not transform_value:
+        return None
+
+    matches = re.findall(
+        r'\(([0-9.eE+\-]+),([0-9.eE+\-]+),([0-9.eE+\-]+)(?:,([0-9.eE+\-]+))?\)',
+        str(transform_value),
+    )
+
+    for match in matches:
+        if match[3]:
+            return f"({match[0]},{match[1]},{match[2]},{match[3]})"
+
+    return None
+
+
+def build_transform_literal(existing_transform, x, y, z):
+    rotation = parse_transform_rotation(existing_transform)
+
+    if not rotation:
+        raise ValueError("could not parse existing actor rotation")
+
+    return f'("({float(x)},{float(y)},{float(z)})","{rotation}")'
+
+
+def teleportable_vehicle_class_where(column_name="class"):
+    """
+    Build the SQL allow-list for movable vehicle actor classes.
+
+    column_name is kept as a small escape hatch because some queries use
+    dune.actors directly while others alias it as "a". Only pass trusted local
+    column names here; do not pass user input.
+    """
+    return " OR ".join(
+        f"{column_name} ILIKE '%{pattern}%'"
+        for pattern in TELEPORTABLE_VEHICLE_CLASS_PATTERNS
+    )
+
+
+def get_teleportable_vehicles():
+    """
+    Return confirmed vehicle actor rows for admin-only relocation.
+
+    Ownership is not trusted yet. owner_account_id is exposed only to admins
+    as a clue, not as an authorization boundary.
+    """
+    # The class allow-list is intentionally explicit. It currently covers the
+    # confirmed actor classes for light/medium/transport ornithopters, sandbike,
+    # buggy, treadwheel, and sandcrawler.
+    vehicle_where = teleportable_vehicle_class_where("class")
+    sql = f"""
+    SELECT
+        id,
+        class,
+        COALESCE(map, '') AS map,
+        COALESCE(partition_id::text, '') AS partition_id,
+        transform::text,
+        COALESCE(owner_account_id::text, '') AS owner_account_id
+    FROM dune.actors
+    WHERE ({vehicle_where})
+      AND transform IS NOT NULL
+    ORDER BY id;
+    """
+
+    cmd = [
+        "docker",
+        "exec",
+        POSTGRES_CONTAINER,
+        "psql",
+        "-U",
+        "dune",
+        "-d",
+        "dune",
+        "-At",
+        "-F",
+        "\t",
+        "-c",
+        sql,
+    ]
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+
+        vehicles = []
+
+        for line in proc.stdout.strip().splitlines():
+            parts = line.split("\t")
+            if len(parts) < 6:
+                continue
+
+            coords = parse_transform(parts[4]) or {}
+            short_class = parts[1].split("/")[-1] if parts[1] else "Vehicle"
+
+            vehicles.append(
+                {
+                    "actor_id": parts[0],
+                    "class": parts[1],
+                    "short_class": short_class,
+                    "map": parts[2],
+                    "partition_id": parts[3],
+                    "transform": parts[4],
+                    "owner_account_id": parts[5],
+                    "x": coords.get("x", ""),
+                    "y": coords.get("y", ""),
+                    "z": coords.get("z", ""),
+                }
+            )
+
+        return vehicles
+
+    except Exception:
+        return []
+
+
+def get_teleportable_vehicle_actor(actor_id):
+    actor_id = int(actor_id)
+    vehicle_where = teleportable_vehicle_class_where("class")
+    sql = f"""
+    SELECT
+        id,
+        class,
+        COALESCE(map, '') AS map,
+        COALESCE(partition_id::text, '') AS partition_id,
+        transform::text
+    FROM dune.actors
+    WHERE id = {actor_id}
+      AND ({vehicle_where})
+      AND transform IS NOT NULL
+    LIMIT 1;
+    """
+
+    cmd = [
+        "docker",
+        "exec",
+        POSTGRES_CONTAINER,
+        "psql",
+        "-U",
+        "dune",
+        "-d",
+        "dune",
+        "-At",
+        "-F",
+        "\t",
+        "-c",
+        sql,
+    ]
+
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    if proc.returncode != 0:
+        raise ValueError(proc.stderr.strip() or "failed to query vehicle actor")
+
+    line = proc.stdout.strip()
+    if not line:
+        raise ValueError("vehicle actor not found")
+
+    parts = line.split("\t")
+    if len(parts) < 5:
+        raise ValueError("unexpected vehicle actor query result")
+
+    return {
+        "actor_id": parts[0],
+        "class": parts[1],
+        "map": parts[2],
+        "partition_id": parts[3],
+        "transform": parts[4],
+    }
+
+
+def build_vehicle_teleport_sql(actor_id, existing_transform, map_key, partition_id, x, y, z):
+    actor_id = int(actor_id)
+    partition_id = int(partition_id)
+    x = float(x)
+    y = float(y)
+    z = float(z)
+    safe_map_key = str(map_key).replace("'", "''")
+    # Preserve the actor's existing rotation quaternion and replace only the
+    # position vector. This avoids turning the vehicle while relocating it.
+    safe_transform = build_transform_literal(existing_transform, x, y, z).replace("'", "''")
+    vehicle_where = teleportable_vehicle_class_where("class")
+
+    return f"""
+UPDATE dune.actors
+SET
+    map = '{safe_map_key}',
+    partition_id = {partition_id},
+    transform = '{safe_transform}'
+WHERE id = {actor_id}
+  AND ({vehicle_where})
+  AND transform IS NOT NULL
+RETURNING
+    id,
+    class,
+    map,
+    partition_id,
+    transform::text;
+"""
 
 
 def world_to_map_pixels(x, y, map_cfg):
@@ -1558,7 +1806,7 @@ def users_page():
 def logs_page():
     if not logged_in():
         return redirect("/login")
-    if current_role() == "viewer":
+    if not is_admin():
         return "Forbidden", 403
     return render_template("logs.html", lines=recent_log_lines())
 
@@ -1738,7 +1986,8 @@ def api_teleport_offline():
     fls_id = request.form.get("fls_id", "").strip()
     map_key = request.form.get("map_key", DEFAULT_MAP_KEY).strip()
     map_cfg = MAP_CONFIGS.get(map_key, MAP_CONFIGS[DEFAULT_MAP_KEY])
-    partition_id = request.form.get("partition_id", str(map_cfg.get("default_partition_id", ""))).strip()
+    partition_default = ORNITHOPTER_PARTITION_DEFAULTS.get(map_cfg["key"], "")
+    partition_id = request.form.get("partition_id", str(partition_default)).strip()
     x = request.form.get("x", "0").strip()
     y = request.form.get("y", "0").strip()
     z = request.form.get("z", "0").strip()
@@ -1859,7 +2108,7 @@ def api_dashboard_metrics():
 def api_logs():
     if not logged_in():
         return jsonify({"ok": False, "error": "not logged in"}), 401
-    if current_role() == "viewer":
+    if not is_admin():
         return jsonify({"ok": False, "error": "permission denied"}), 403
     return jsonify({"ok": True, "lines": recent_log_lines()})
 
@@ -1941,6 +2190,33 @@ def api_vehicles():
     return jsonify({"ok": True, "vehicles": get_vehicles()})
 
 
+@app.route("/api/teleportable-vehicles")
+def api_teleportable_vehicles():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    return jsonify({"ok": True, "vehicles": get_teleportable_vehicles()})
+
+
+@app.route("/api/ornithopters")
+def api_ornithopters():
+    """
+    Backward-compatible alias for browsers that still have older admin JS cached.
+    New code should use /api/teleportable-vehicles.
+    """
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    vehicles = get_teleportable_vehicles()
+    return jsonify({"ok": True, "ornithopters": vehicles, "vehicles": vehicles})
+
+
 @app.route("/api/repair-vehicle", methods=["POST"])
 def api_repair_vehicle():
     if not logged_in():
@@ -1967,6 +2243,64 @@ def api_repair_vehicle():
     except Exception as exc:
         return jsonify({"ok": False, "error": f"Vehicle repair failed: {exc}"}), 500
 
+
+
+@app.route("/api/teleport-vehicle", methods=["POST"])
+def api_teleport_vehicle():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    # Vehicle ownership is not confirmed in the current schema. Even though
+    # dune.actors has owner_account_id, observed vehicle rows may be null,
+    # so this tool remains admin-only and must not be exposed to operators/VIPs.
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    actor_id = request.form.get("actor_id", "").strip()
+    map_key = request.form.get("map_key", DEFAULT_MAP_KEY).strip()
+    map_cfg = MAP_CONFIGS.get(map_key, MAP_CONFIGS[DEFAULT_MAP_KEY])
+    partition_id = request.form.get("partition_id", str(map_cfg.get("default_partition_id", ""))).strip()
+    x = request.form.get("x", "0").strip()
+    y = request.form.get("y", "0").strip()
+    z = request.form.get("z", "1000").strip()
+
+    if not actor_id:
+        return jsonify({"ok": False, "error": "missing vehicle actor ID"}), 400
+
+    if not partition_id:
+        return jsonify({"ok": False, "error": "missing partition ID"}), 400
+
+    try:
+        actor = get_teleportable_vehicle_actor(actor_id)
+        sql = build_vehicle_teleport_sql(
+            actor_id,
+            actor["transform"],
+            map_cfg["key"],
+            partition_id,
+            x,
+            y,
+            z,
+        )
+        output = run_psql(sql, timeout=60)
+
+        log_action(
+            session["user"],
+            f"teleport vehicle actor {actor_id} map {map_cfg['key']} partition {partition_id} to ({x}, {y}, {z})",
+        )
+
+        return jsonify({"ok": True, "output": output})
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Vehicle teleport failed: {exc}"}), 500
+
+
+@app.route("/api/teleport-ornithopter", methods=["POST"])
+def api_teleport_ornithopter():
+    """
+    Backward-compatible alias for cached admin pages from the thopter-only build.
+    New code should use /api/teleport-vehicle.
+    """
+    return api_teleport_vehicle()
 
 
 @app.route("/api/overrepair", methods=["POST"])
@@ -2022,12 +2356,70 @@ def api_restart_target():
     if target not in RESTART_TARGETS:
         return jsonify({"ok": False, "error": "unknown restart target"}), 400
 
+    if target in INFRASTRUCTURE_RESTART_TARGETS and not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
     try:
         output = run_command([str(DUNE_SCRIPT), "restart", target], timeout=180)
         log_action(session["user"], f"restart target {target}")
         return jsonify({"ok": True, "output": output})
     except Exception as exc:
         return jsonify({"ok": False, "error": f"Restart failed: {exc}"}), 500
+
+
+
+@app.route("/api/restart-map", methods=["POST"])
+def api_restart_map():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+    if not is_operator_or_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    map_name = request.form.get("map_name", "").strip()
+    allowed_maps = {"DeepDesert_1", "SH_Arrakeen", "SH_HarkoVillage"}
+
+    if map_name not in allowed_maps:
+        return jsonify({"ok": False, "error": "map restart not allowed"}), 400
+
+    try:
+        stop_output = run_command([str(DUNE_SCRIPT), "despawn", map_name, "--force"], timeout=180)
+        start_output = run_command([str(DUNE_SCRIPT), "spawn", map_name], timeout=300)
+        log_action(session["user"], f"restart map {map_name}")
+        return jsonify({
+            "ok": True,
+            "output": "DESPAWN OUTPUT:\\n" + stop_output + "\\n\\nSPAWN OUTPUT:\\n" + start_output
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Map restart failed: {exc}"}), 500
+
+
+@app.route("/api/db-command", methods=["POST"])
+def api_db_command():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    action = request.form.get("action", "").strip()
+
+    allowed = {
+        "health": [str(DUNE_SCRIPT), "db", "health"],
+        "status": [str(DUNE_SCRIPT), "db", "status"],
+        "list": [str(DUNE_SCRIPT), "db", "list"],
+        "backup": [str(DUNE_SCRIPT), "db", "backup"],
+    }
+
+    cmd = allowed.get(action)
+    if not cmd:
+        return jsonify({"ok": False, "error": "invalid database action"}), 400
+
+    try:
+        output = run_command(cmd, timeout=600)
+        log_action(session["user"], f"dune db {action}")
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Database command failed: {exc}"}), 500
+
 
 
 @app.route("/api/maps-list", methods=["POST"])

@@ -9,25 +9,94 @@
 <div class="grid">
 
 <div class="box">
-<h2>Map Spawner</h2>
+<h2>Gameplay Services</h2>
 
-{% for map_name in maps %}
-<form class="ajaxForm" data-endpoint="/api/spawn-map">
-    <input type="hidden" name="map_name" value="{{ map_name }}">
-    <button type="submit">Spawn {{ map_name }}</button>
+<form class="ajaxForm" data-endpoint="/api/restart-target">
+    <input type="hidden" name="target" value="survival">
+    <button type="submit">Restart Survival</button>
 </form>
-{% endfor %}
+
+<form class="ajaxForm" data-endpoint="/api/restart-map">
+    <input type="hidden" name="map_name" value="DeepDesert_1">
+    <button type="submit">Restart Deep Desert</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/restart-target">
+    <input type="hidden" name="target" value="overmap">
+    <button type="submit">Restart Overmap</button>
+</form>
+</div>
+
+{% if session.role == "admin" %}
+    <div class="box">
+    <h2>Infrastructure Services</h2>
+
+    <form class="ajaxForm" data-endpoint="/api/restart-target">
+        <input type="hidden" name="target" value="gateway">
+        <button type="submit">Restart Gateway</button>
+    </form>
+
+    <form class="ajaxForm" data-endpoint="/api/restart-target">
+        <input type="hidden" name="target" value="director">
+        <button type="submit">Restart Director</button>
+    </form>
+
+    <form class="ajaxForm" data-endpoint="/api/restart-target">
+        <input type="hidden" name="target" value="text-router">
+        <button type="submit">Restart Text Router</button>
+    </form>
+    </div>
+{% endif %}
+
+</div>
+
+<div class="grid">
+
+<div class="box">
+<h2>Map Controls</h2>
+
+<form class="ajaxForm" data-endpoint="/api/spawn-map">
+    <input type="hidden" name="map_name" value="DeepDesert_1">
+    <button type="submit">Spawn Deep Desert</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/spawn-map">
+    <input type="hidden" name="map_name" value="SH_Arrakeen">
+    <button type="submit">Spawn Arrakeen</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/spawn-map">
+    <input type="hidden" name="map_name" value="SH_HarkoVillage">
+    <button type="submit">Spawn Harko Village</button>
+</form>
 </div>
 
 <div class="box">
-<h2>Restart Services</h2>
+<h2>Database</h2>
 
-{% for target in restart_targets %}
-<form class="ajaxForm" data-endpoint="/api/restart-target">
-    <input type="hidden" name="target" value="{{ target }}">
-    <button type="submit">Restart {{ target }}</button>
+<div class="warning">
+Safe database actions only. Restore/import/delete should still be done through dune manager or the shell.
+</div>
+
+<form class="ajaxForm" data-endpoint="/api/db-command">
+    <input type="hidden" name="action" value="health">
+    <button type="submit">DB Health</button>
 </form>
-{% endfor %}
+
+<form class="ajaxForm" data-endpoint="/api/db-command">
+    <input type="hidden" name="action" value="status">
+    <button type="submit">DB Status</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/db-command">
+    <input type="hidden" name="action" value="list">
+    <button type="submit">List Backups</button>
+</form>
+
+<form class="ajaxForm" data-endpoint="/api/db-command">
+    <input type="hidden" name="action" value="backup">
+    <button type="submit">Create Database Backup</button>
+</form>
 </div>
 
 </div>
@@ -38,9 +107,7 @@
 <h2>Map Runtime Modes</h2>
 
 <div class="warning">
-RedBlink v1.3.2 adds configurable map runtime modes.
-<b>Always-on</b> keeps a map running. <b>Dynamic</b> lets the stack spawn/despawn it as needed.
-Survival_1 and Overmap are protected by the RedBlink stack and should remain always-on.
+RedBlink v1.3.2 map runtime controls. Survival_1 and Overmap are protected always-on maps and should not be toggled here.
 </div>
 
 <form class="ajaxForm" data-endpoint="/api/maps-list">
@@ -55,9 +122,9 @@ Survival_1 and Overmap are protected by the RedBlink stack and should remain alw
     <button type="submit">Reconcile Always-On Maps</button>
 </form>
 
-<h3>Set Map Mode</h3>
+<h3>Primary Maps</h3>
 
-{% for map_name in maps %}
+{% for map_name in ["SH_Arrakeen", "SH_HarkoVillage", "DeepDesert_1"] %}
 <div class="box">
     <h3>{{ map_name }}</h3>
 
@@ -81,45 +148,17 @@ Survival_1 and Overmap are protected by the RedBlink stack and should remain alw
 {% endfor %}
 </div>
 
-<div class="box">
-<h2>Deep Desert PvP/PvE Dual Mode</h2>
+{% if session.role == "admin" %}
+    <div class="box">
+    <h2>Advanced Management</h2>
 
-<div class="warning">
-RedBlink v1.3.2 adds Deep Desert dual mode controls.
-Use status first. Enabling/disabling may modify server configuration and may require map/server restarts depending on stack state.
-</div>
+    <div class="warning">
+    Deep Desert PvP/PvE dual-mode and autoscaler controls remain shell/manager workflows until the underlying commands are fully mapped.
+    </div>
 
-<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
-    <input type="hidden" name="action" value="status">
-    <button type="submit">Deep Desert Dual Status</button>
-</form>
-
-<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
-    <input type="hidden" name="action" value="enable">
-    <button type="submit">Enable Deep Desert PvP/PvE Dual Mode</button>
-</form>
-
-<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
-    <input type="hidden" name="action" value="disable">
-    <button type="submit">Disable Deep Desert Dual Mode</button>
-</form>
-
-<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
-    <input type="hidden" name="action" value="disable_force">
-    <button type="submit">Force Disable Deep Desert Dual Mode</button>
-</form>
-
-<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
-    <input type="hidden" name="action" value="bootstrap">
-    <button type="submit">Bootstrap Deep Desert Dual Mode</button>
-</form>
-
-<form class="ajaxForm" data-endpoint="/api/deepdesert-dual">
-    <input type="hidden" name="action" value="repair">
-    <button type="submit">Repair Deep Desert Dual Setup</button>
-</form>
-
-</div>
+    <p><a href="/infrastructure">Open Infrastructure / Host Shell</a></p>
+    </div>
+{% endif %}
 
 </div>
 {% endblock %}

@@ -1,6 +1,68 @@
 {% extends "base.html" %}
 {% block title %}Admin Panel{% endblock %}
 
+{% block head_extra %}
+<style>
+.ornithopter-map-frame {
+    position: relative;
+    height: 520px;
+    overflow: auto;
+    background: #020202;
+    border: 1px solid #333;
+    margin-top: 12px;
+    cursor: grab;
+    user-select: none;
+}
+
+.ornithopter-map-frame.is-dragging {
+    cursor: grabbing;
+}
+
+.ornithopter-map-canvas {
+    position: relative;
+}
+
+.ornithopter-map-image {
+    position: absolute;
+    left: 0;
+    top: 0;
+    user-select: none;
+    pointer-events: none;
+}
+
+.ornithopter-marker-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.ornithopter-marker {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid #000;
+    background: #71d36b;
+    box-shadow: 0 0 12px #71d36b;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    z-index: 5;
+}
+
+.ornithopter-marker:hover {
+    width: 18px;
+    height: 18px;
+    z-index: 10;
+}
+
+.ornithopter-map-hint {
+    margin-top: 8px;
+    color: #d8d8d8;
+    font-size: 0.95rem;
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <h1>Admin Panel</h1>
 
@@ -65,13 +127,93 @@ Recommended first use: test on a low-risk vehicle and confirm in-game behavior a
 </div>
 
 </div>
+
+<div class="grid">
+
+<div class="box">
+<h2>Vehicle Teleport</h2>
+
+<div class="warning">
+Experimental admin-only tool.<br><br>
+<b>Map restart required:</b> vehicle actors already loaded by the server keep their old in-memory location until the affected map/server instance is restarted.<br><br>
+Ownership is not confirmed in the current schema, so this tool can move any detected supported vehicle actor. Use a database backup and test with a low-risk vehicle first.<br><br>
+This updates <b>dune.actors.map</b>, <b>partition_id</b>, and XYZ position while preserving the current rotation.<br><br>
+Aim high on <b>Z</b>. A value below terrain can place the vehicle underground, so overestimate altitude first and lower it only after confirming in-game.
+</div>
+
+<form id="ornithopterTeleportForm">
+
+    <label>Vehicle Actor</label>
+    <select id="ornithopterSelect" onchange="fillOrnithopterTeleportFields()">
+        <option value="">Loading vehicles...</option>
+    </select>
+
+    <label>Actor ID</label>
+    <input type="text" name="actor_id" id="ornithopterActorId" placeholder="Example: 72" required>
+
+    <label>Map</label>
+    <select name="map_key" id="ornithopterMapKey" onchange="fillOrnithopterPartitionDefault()">
+        <option value="HaggaBasin">Arrakis - Hagga Basin</option>
+        <option value="DeepDesert">The Deep Desert</option>
+    </select>
+
+    <label>Partition ID</label>
+    <input type="text" name="partition_id" id="ornithopterPartitionId" value="1" required>
+
+    <label>X</label>
+    <input type="text" name="x" id="ornithopterX" required>
+
+    <label>Y</label>
+    <input type="text" name="y" id="ornithopterY" required>
+
+    <label>Z</label>
+    <input type="text" name="z" id="ornithopterZ" required>
+
+    <button type="submit">Teleport Vehicle</button>
+</form>
+</div>
+
+<div class="box">
+<h2>Vehicle Live Map</h2>
+
+<div class="warning">
+Only supported vehicle actors are shown here. Click a marker to select the vehicle, drag the map to pan, then double-click the map to set the destination X/Y in the teleport form. Ownership is not confirmed, so use actor ID/class/location to identify the vehicle before moving it.
+</div>
+
+<label>Map</label>
+<select id="ornithopterMapView" onchange="renderOrnithopterAdminMap()">
+    <option value="HaggaBasin">Arrakis - Hagga Basin</option>
+    <option value="DeepDesert">The Deep Desert</option>
+</select>
+
+<label>Zoom</label>
+<input id="ornithopterMapZoom" type="range" min="5" max="100" value="10" oninput="setOrnithopterAdminMapZoomFromSlider()">
+<div id="ornithopterMapZoomReadout">10%</div>
+<div class="ornithopter-map-hint">Drag to pan. Double-click the map to set X/Y. Hold Ctrl on Windows/Linux or Command on macOS while using the mouse wheel to zoom. Normal wheel scroll moves the page.</div>
+
+<div class="coord-box" id="ornithopterMapSummary">
+    Loading vehicles...
+</div>
+
+<div class="ornithopter-map-frame" id="ornithopterMapFrame">
+    <div class="ornithopter-map-canvas" id="ornithopterMapCanvas">
+        <img class="ornithopter-map-image" id="ornithopterMapImage" src="" alt="">
+        <div class="ornithopter-marker-layer" id="ornithopterMarkerLayer"></div>
+    </div>
+</div>
+</div>
+
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script src="/static/dune-admin.js"></script>
 <script>
+const adminMapConfigs = {{ map_configs|tojson }};
 loadCharactersForAdminPage();
 loadVehiclesForAdminPage();
+loadOrnithoptersForAdminPage();
+wireOrnithopterAdminMapControls();
 
 const overrepairForm = document.getElementById("overrepairForm");
 overrepairForm.addEventListener("submit", async function(event) {
@@ -93,6 +235,17 @@ vehicleRepairForm.addEventListener("submit", async function(event) {
     }
 
     await postForm("/api/repair-vehicle", vehicleRepairForm);
+});
+
+const ornithopterTeleportForm = document.getElementById("ornithopterTeleportForm");
+ornithopterTeleportForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    if (!confirm("This directly edits a vehicle actor location. Ownership is not confirmed. Overestimate Z to avoid placing the vehicle below ground. Continue?")) {
+        return;
+    }
+
+    await postForm("/api/teleport-vehicle", ornithopterTeleportForm);
 });
 </script>
 {% endblock %}
