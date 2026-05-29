@@ -1,150 +1,372 @@
-n00bGame's Dune Awakening Web-Admin
+# n00bGame's Dune Awakening Web-Admin
 
-A companion administration panel for RedBlink's self-hosted Dune Awakening Docker stack.
+A companion administration panel for RedBlink's self-hosted **Dune Awakening** Docker stack.
 
 Built for private/LAN-hosted servers with a focus on:
 
-live player visibility
-quality-of-life admin tools
-item grants
-map visualization
-offline teleportation
-operational convenience
+* Live player visibility
+* Live map visualization
+* Teleportation and recovery tools
+* Item grants
+* Server administration
+* Infrastructure management
+* RedBlink stack management
 
-⚠️ Alpha Status:
+---
 
-This project is currently in alpha and under active development.
+# Current Version
 
-Some systems are stable and tested.
-Others are experimental and intended for controlled/private environments only.
+```text
+0.6.4-alpha
+```
 
-Use at your own risk and always maintain database/world backups.
+Target RedBlink Stack:
 
-Current Features:
-Authentication & Roles
-First-run admin account creation
-Viewer / Operator / Admin roles
-Session-based authentication
-Player Visibility
-Who's Online page
-Live Hagga Basin map preview
-Live actor markers from dune.actors.transform
-Vehicle/base/player visualization
-Item & Vehicle Tools
-Item search and grants
-Mk6 Scout Ornithopter grant
-Mk6 Medium Ornithopter kit grant
-Vehicle module repair (experimental)
-Live Map System
-Hagga Basin map
-Deep Desert map
-Mouse-wheel zoom
-Click-drag panning
-Click-to-select teleport coordinates
-Teleportation
-Offline teleportation
-Emergency Return to Safe Hagga Basin Point
-Character dropdown targeting
-Administrative Utilities
-Action logging
-Server/service controls
-SQL utility integration
-Recovery/unstuck tooling
-Included Assets
+```text
+v1.3.2
+```
 
-The repository already includes the required UI/map assets inside:
+---
 
-./static/
+# Alpha Status
 
-Included assets:
+This project is currently in active development.
 
-dune-admin.png
-arrakis_hb.webp
-deep_desert.webp
+Features are tested on private self-hosted environments and may change between releases.
 
-Requirements:
-Python 3.11+
-Docker
-RedBlink Dune Awakening self-hosted stack
-Linux host (Ubuntu 24.0.4)
+Always maintain backups of:
 
-Installation:
+* Database
+* World data
+* Configuration files
+
+before using administrative tools.
+
+---
+
+# Features
+
+## Authentication & Roles
+
+* First-run admin account creation
+* Viewer / Operator / Admin roles
+* Session authentication
+* Role-based permissions
+
+---
+
+## Dashboard
+
+### System Resources
+
+Live AJAX-updating dashboard showing:
+
+* CPU usage
+* RAM usage
+* Disk usage
+* Network RX/TX
+* World statistics
+
+### World Summary
+
+* Total players
+* Online players
+* Total vehicles
+* Hagga Basin vehicle count
+* Deep Desert vehicle count
+
+---
+
+## Who's Online
+
+* Online player list
+* Viewer-safe Hagga Basin map preview
+* Live player visibility
+
+---
+
+## Live Map
+
+### Hagga Basin
+
+* Live player markers
+* Live vehicle markers
+* Live base markers
+* Mouse-wheel zoom
+* Click-drag panning
+
+### Deep Desert
+
+* Dedicated map support
+
+### Teleportation
+
+* Offline player teleport
+* Click-to-select coordinates
+* Emergency Return to Safe Hagga Basin Point
+
+---
+
+## Item Grants
+
+* Item search
+* Item grants
+* Character selection dropdown
+
+### Included Templates
+
+* Mk6 Scout Ornithopter
+* Mk6 Medium Ornithopter
+
+Medium Ornithopter includes:
+
+* Chassis
+* Hull
+* Components
+* Inventory
+* Scanner
+* Launcher
+* Fuel
+* 250 Rocket Ammo
+
+---
+
+## Vehicle Tools
+
+Experimental:
+
+* Vehicle module repair
+* Vehicle durability modification
+
+---
+
+## Server Management
+
+### Service Controls
+
+* Restart services
+* Spawn maps
+* Despawn maps
+* View logs
+
+### Runtime Information
+
+* Ports
+* Server status
+* Running maps
+
+---
+
+## Map Runtime Controls (RedBlink v1.3.2)
+
+Supports:
+
+```bash
+dune maps list
+dune maps mode
+dune maps set <map> dynamic
+dune maps set <map> always-on
+dune maps reconcile
+```
+
+Examples:
+
+* Arrakeen always-on
+* Arrakeen dynamic
+* Harko Village always-on
+* Harko Village dynamic
+* Deep Desert always-on
+* Deep Desert dynamic
+
+---
+
+## Infrastructure
+
+### Host Diagnostics
+
+* System information
+* Docker status
+* Dune status
+
+### Host Shell
+
+Optional browser-based terminal.
+
+Supports:
+
+* Interactive shell
+* Open Shell + dune init
+* Open Shell + dune manager
+
+### RedBlink Installer
+
+Guided installer for:
+
+* Base packages
+* Docker
+* Docker Compose
+* Docker permissions
+* Dune command installation
+* Stack deployment
+
+---
+
+# Installation
+
+Clone the repository:
+
+```bash
+git clone https://github.com/n00bgames/ng_da_webadmin.git
+cd ng_da_webadmin
+```
+
+Install Linux prerequisites:
+
+```bash
+sudo apt update
+sudo apt install -y \
+python3 \
+python3-pip \
+python3-venv \
+git \
+curl
+```
+
+Create virtual environment:
+
+```bash
 python3 -m venv venv
 source venv/bin/activate
+```
 
+Install Python requirements:
+
+```bash
 pip install -r requirements.txt
+```
 
-Running:
-source venv/bin/activate
+---
 
-python app.py
+# Setup
 
-Then browse to:
+Run setup utility:
 
+```bash
+chmod +x setup.sh
+./setup.sh
+```
+
+This creates a restricted sudo configuration required for Infrastructure installer functions.
+
+---
+
+# Starting The Panel
+
+```bash
+chmod +x start.sh
+./start.sh
+```
+
+Browse to:
+
+```text
 http://127.0.0.1:8088
+```
 
-Recommended Security Practices:
+---
+
+# Infrastructure Features
+
+Infrastructure tooling is disabled by default.
+
+Enabled by:
+
+```bash
+export ENABLE_HOST_COMMAND_RUNNER=1
+export ENABLE_STACK_INSTALLER=1
+export ENABLE_HOST_SHELL=1
+```
+
+or by using:
+
+```bash
+./start.sh
+```
+
+---
+
+# Included Assets
+
+Repository includes:
+
+```text
+static/
+├── dune-admin.png
+├── arrakis_hb.webp
+└── deep_desert.webp
+```
+
+---
+
+# Security Notes
 
 This project is intended for:
 
-LAN use
-private servers
-trusted operators/admins
+* LAN environments
+* VPN-hosted environments
+* Private server administration
 
-Strongly recommended:
+Do NOT expose directly to the public Internet without additional protections.
 
-reverse proxy
-HTTPS
-VPN or private network access
-additional auth layers if internet exposed
+Administrative features include:
 
-This panel contains tools capable of:
+* Item spawning
+* Database modification
+* Teleportation
+* Service control
+* Docker management
+* Interactive host shell
 
-direct SQL modification
-player teleportation
-item spawning
-service control
+Use responsibly.
 
-Treat it accordingly.
+---
 
-Known Experimental Features:
-Vehicle Repair
+# Known Issues
 
-Vehicle module repair currently writes durability values directly into:
+* Vehicle repair remains experimental.
+* Browser shell resizing continues to receive improvements.
+* Map marker rendering may vary between releases.
 
-dune.vehicle_modules.stats
+---
 
-Behavior may vary depending on:
+# Planned Features
 
-runtime caching
-vehicle respawn state
-server updates
-Offline Teleport
+* Deep Desert PvP/PvE dual-mode controls
+* Autoscaler controls
+* Dynamic map configuration UI
+* Backup management
+* Remote RedBlink deployment improvements
+* Infrastructure monitoring
+* Host management tools
 
-Teleportation is intended for offline characters.
+---
 
-Online teleports may not apply correctly because the live server owns actor state.
+# Credits
 
-Planned Features:
-Infrastructure management layer
-Remote RedBlink stack deployment
-Automated prerequisite installation
-Backup tooling
-VM/container monitoring
-Optional host console integration
-Improved map overlays
-Deep Desert enhancements
+* RedBlink and contributors
+* Funcom
+* Community researchers and testers
 
-Philosophy:
+---
 
-This project exists to improve the self-hosted Dune Awakening experience through practical tooling and experimentation while remaining respectful of:
+# License
 
-RedBlink's work
-Funcom's data structures
-private server operators
-player safety
+GNU General Public License v3.0 (GPLv3)
 
-Credits:
-RedBlink and contributors for the self-hosted stack
-Funcom for Dune Awakening
-Community researchers documenting DB structures and server behavior
+See:
+
+```text
+LICENSE
+```
+
+for full license text.
