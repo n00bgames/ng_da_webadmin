@@ -1,5 +1,12 @@
 # n00bGame's Dune Awakening Web-Admin
 
+![Version](https://img.shields.io/badge/version-0.6.4--alpha-orange)
+![GPLv3](https://img.shields.io/badge/license-GPLv3-green)
+![RedBlink](https://img.shields.io/badge/RedBlink-v1.3.2-blue)
+![Status](https://img.shields.io/badge/status-alpha-orange)
+![Platform](https://img.shields.io/badge/platform-Linux-lightgrey)
+![Python](https://img.shields.io/badge/python-3.11+-blue)
+
 A companion administration panel for RedBlink's self-hosted **Dune Awakening** Docker stack.
 
 Built for private/LAN-hosted servers with a focus on:
