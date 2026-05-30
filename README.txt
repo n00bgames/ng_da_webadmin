@@ -358,3 +358,10 @@ GPLv3. See LICENSE.
 
 Third-party reference material remains under its original license. See
 THIRD_PARTY_NOTICES.md for included MIT license text and attribution.
+
+
+AI Collaboration Note
+---------------------
+
+Large portions of this project have been collaboratively created with the use
+of generative AI tools, including ChatGPT and Codex.
