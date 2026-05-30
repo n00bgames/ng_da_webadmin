@@ -147,6 +147,14 @@ async function loadCharactersForGrantPage() {
 async function loadCharactersForAdminPage() {
     const chars = await fetchCharacters(true);
     fillCharacterSelect("overrepairCharacterSelect", chars);
+    fillCharacterSelect("lasgunCharacterSelect", chars);
+    fillCharacterSelect("researchCharacterSelect", chars);
+    fillCharacterSelect("characterXpCharacterSelect", chars);
+    fillCharacterSelect("characterLevelCharacterSelect", chars);
+    fillCharacterSelect("xpCharacterSelect", chars);
+    fillCharacterSelect("specializationResetCharacterSelect", chars);
+    fillCharacterSelect("progressionCharacterSelect", chars);
+    fillCharacterSelect("solariCharacterSelect", chars);
 }
 
 function fillGrantPlayerId() {
@@ -180,6 +188,62 @@ function fillOverrepairFields() {
 
     if (actorInput) actorInput.value = c.character_actor_id || "";
     if (inventoryInput) inventoryInput.value = c.inventory_id || "";
+}
+
+function fillLasgunPlayerId() {
+    const sel = document.getElementById("lasgunCharacterSelect");
+    const input = document.getElementById("lasgunPlayerId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.fls_id || "";
+}
+
+function fillResearchActorId() {
+    const sel = document.getElementById("researchCharacterSelect");
+    const input = document.getElementById("researchActorId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.character_actor_id || "";
+}
+
+function fillCharacterXpActorId() {
+    const sel = document.getElementById("characterXpCharacterSelect");
+    const input = document.getElementById("characterXpActorId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.character_actor_id || "";
+}
+
+function fillCharacterLevelActorId() {
+    const sel = document.getElementById("characterLevelCharacterSelect");
+    const input = document.getElementById("characterLevelActorId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.character_actor_id || "";
+}
+
+function fillXpControllerId() {
+    const sel = document.getElementById("xpCharacterSelect");
+    const input = document.getElementById("xpControllerId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.player_controller_id || "";
+}
+
+function fillSpecializationResetControllerId() {
+    const sel = document.getElementById("specializationResetCharacterSelect");
+    const input = document.getElementById("specializationResetControllerId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.player_controller_id || "";
+}
+
+function fillProgressionPlayerId() {
+    const sel = document.getElementById("progressionCharacterSelect");
+    const input = document.getElementById("progressionPlayerId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.fls_id || "";
+}
+
+function fillSolariPlayerId() {
+    const sel = document.getElementById("solariCharacterSelect");
+    const input = document.getElementById("solariPlayerId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.fls_id || "";
 }
 
 async function searchItems() {

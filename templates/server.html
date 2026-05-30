@@ -11,6 +11,7 @@
 <div class="box">
 <h2>Gameplay Services</h2>
 
+<div class="button-row">
 <form class="ajaxForm" data-endpoint="/api/restart-target">
     <input type="hidden" name="target" value="survival">
     <button type="submit">Restart Survival</button>
@@ -26,11 +27,13 @@
     <button type="submit">Restart Overmap</button>
 </form>
 </div>
+</div>
 
 {% if session.role == "admin" %}
     <div class="box">
     <h2>Infrastructure Services</h2>
 
+    <div class="button-row">
     <form class="ajaxForm" data-endpoint="/api/restart-target">
         <input type="hidden" name="target" value="gateway">
         <button type="submit">Restart Gateway</button>
@@ -46,6 +49,7 @@
         <button type="submit">Restart Text Router</button>
     </form>
     </div>
+    </div>
 {% endif %}
 
 </div>
@@ -55,6 +59,7 @@
 <div class="box">
 <h2>Map Controls</h2>
 
+<div class="button-row">
 <form class="ajaxForm" data-endpoint="/api/spawn-map">
     <input type="hidden" name="map_name" value="DeepDesert_1">
     <button type="submit">Spawn Deep Desert</button>
@@ -70,6 +75,7 @@
     <button type="submit">Spawn Harko Village</button>
 </form>
 </div>
+</div>
 
 <div class="box">
 <h2>Database</h2>
@@ -78,6 +84,7 @@
 Safe database actions only. Restore/import/delete should still be done through dune manager or the shell.
 </div>
 
+<div class="button-row">
 <form class="ajaxForm" data-endpoint="/api/db-command">
     <input type="hidden" name="action" value="health">
     <button type="submit">DB Health</button>
@@ -98,6 +105,7 @@ Safe database actions only. Restore/import/delete should still be done through d
     <button type="submit">Create Database Backup</button>
 </form>
 </div>
+</div>
 
 </div>
 
@@ -110,6 +118,7 @@ Safe database actions only. Restore/import/delete should still be done through d
 RedBlink v1.3.2 map runtime controls. Survival_1 and Overmap are protected always-on maps and should not be toggled here.
 </div>
 
+<div class="button-row">
 <form class="ajaxForm" data-endpoint="/api/maps-list">
     <button type="submit">List Maps</button>
 </form>
@@ -121,13 +130,15 @@ RedBlink v1.3.2 map runtime controls. Survival_1 and Overmap are protected alway
 <form class="ajaxForm" data-endpoint="/api/maps-reconcile">
     <button type="submit">Reconcile Always-On Maps</button>
 </form>
+</div>
 
 <h3>Primary Maps</h3>
 
 {% for map_name in ["SH_Arrakeen", "SH_HarkoVillage", "DeepDesert_1"] %}
-<div class="box">
+<div class="selected">
     <h3>{{ map_name }}</h3>
 
+    <div class="button-row">
     <form class="ajaxForm" data-endpoint="/api/maps-mode">
         <input type="hidden" name="map_name" value="{{ map_name }}">
         <button type="submit">Show {{ map_name }} Mode</button>
@@ -144,6 +155,7 @@ RedBlink v1.3.2 map runtime controls. Survival_1 and Overmap are protected alway
         <input type="hidden" name="mode" value="dynamic">
         <button type="submit">Set {{ map_name }} Dynamic</button>
     </form>
+    </div>
 </div>
 {% endfor %}
 </div>
@@ -156,7 +168,7 @@ RedBlink v1.3.2 map runtime controls. Survival_1 and Overmap are protected alway
     Deep Desert PvP/PvE dual-mode and autoscaler controls remain shell/manager workflows until the underlying commands are fully mapped.
     </div>
 
-    <p><a href="/infrastructure">Open Infrastructure / Host Shell</a></p>
+    <button type="button" onclick="window.location.href='/infrastructure'">Open Infrastructure / Host Shell</button>
     </div>
 {% endif %}
 

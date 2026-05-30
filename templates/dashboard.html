@@ -147,6 +147,16 @@
         <div class="metric-title">Deep Desert Vehicles</div>
         <div class="metric-value" id="deepDesertVehicles">--</div>
     </div>
+
+    <div class="metric-card">
+        <div class="metric-title">Hagga Bases</div>
+        <div class="metric-value" id="haggaBases">--</div>
+    </div>
+
+    <div class="metric-card">
+        <div class="metric-title">Deep Desert Bases</div>
+        <div class="metric-value" id="deepDesertBases">--</div>
+    </div>
 </div>
 </div>
 
@@ -278,6 +288,8 @@ async function refreshDashboardMetrics() {
             setText("totalVehicles", world.total_vehicles);
             setText("haggaVehicles", world.vehicles_hagga_basin);
             setText("deepDesertVehicles", world.vehicles_deep_desert);
+            setText("haggaBases", world.bases_hagga_basin);
+            setText("deepDesertBases", world.bases_deep_desert);
         } else {
             worldError.textContent = world.error || "World metrics unavailable.";
             worldError.style.display = "block";

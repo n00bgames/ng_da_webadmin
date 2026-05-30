@@ -11,7 +11,13 @@
     overflow: auto;
     background: #020202;
     border: 1px solid #333;
-    cursor: crosshair;
+    cursor: grab;
+    overscroll-behavior: contain;
+}
+
+.vip-map-frame.dragging {
+    cursor: grabbing;
+    user-select: none;
 }
 
 .vip-map-canvas {
@@ -40,6 +46,7 @@
     border: 2px solid #000;
     transform: translate(-50%, -50%);
     z-index: 5;
+    pointer-events: none;
 }
 
 .vip-map-marker.player {
@@ -55,6 +62,19 @@
 .vip-map-marker.base {
     background: #d6a444;
     box-shadow: 0 0 12px #d6a444;
+}
+
+.vip-teleport-workbench {
+    display: grid;
+    grid-template-columns: minmax(320px, 0.75fr) minmax(520px, 1.25fr);
+    gap: 16px;
+    align-items: start;
+}
+
+@media (max-width: 1100px) {
+    .vip-teleport-workbench {
+        grid-template-columns: 1fr;
+    }
 }
 </style>
 {% endblock %}
@@ -127,9 +147,11 @@ Make sure you have at least 21 free inventory slots; 25+ is recommended to reduc
 <div class="box">
 <h2>Self Offline Teleport</h2>
 <div class="warning">
-Use only while your character is offline. Click the map to fill X/Y, set a safe Z, then teleport. The server uses your linked character automatically; no player IDs are accepted from the browser.
+Use only while your character is offline. Drag the map to pan, hold Ctrl/Command while using the mouse wheel to zoom, then double-click the map to confirm and fill X/Y. Set a safe Z before teleporting. The server uses your linked character automatically; no player IDs are accepted from the browser.
 </div>
 
+<div class="vip-teleport-workbench">
+<div>
 <label>Map</label>
 <select id="vipMapSelect" onchange="switchVipMap()">
     <option value="HaggaBasin">Arrakis - Hagga Basin</option>
@@ -161,12 +183,14 @@ Use only while your character is offline. Click the map to fill X/Y, set a safe 
 
     <button type="submit">Teleport My Offline Character</button>
 </form>
+</div>
 
 <div class="vip-map-frame" id="vipMapFrame">
     <div class="vip-map-canvas" id="vipMapCanvas">
         <img class="vip-map-image" id="vipMapImage" src="" alt="">
         <div class="vip-marker-layer" id="vipMarkerLayer"></div>
     </div>
+</div>
 </div>
 </div>
 {% endblock %}
@@ -178,6 +202,11 @@ const vipMapConfigs = {{ map_configs|tojson }};
 let vipSelectedMapKey = "{{ default_map_key }}";
 let vipMapConfig = vipMapConfigs[vipSelectedMapKey];
 let vipMapZoom = 0.14;
+let vipMapDragging = false;
+let vipMapDragStartX = 0;
+let vipMapDragStartY = 0;
+let vipMapDragScrollLeft = 0;
+let vipMapDragScrollTop = 0;
 
 function vipPartitionForMap(mapKey) {
     if (mapKey === "DeepDesert") return "8";
@@ -229,18 +258,93 @@ function switchVipMap() {
     refreshVipMapMarkers();
 }
 
-function fillVipTeleportTarget(event) {
+function vipMapEventToWorld(event) {
     const frame = document.getElementById("vipMapFrame");
     const rect = frame.getBoundingClientRect();
     const px = (frame.scrollLeft + event.clientX - rect.left) / vipMapZoom;
     const py = (frame.scrollTop + event.clientY - rect.top) / vipMapZoom;
-    if (px < 0 || py < 0 || px > vipMapConfig.width || py > vipMapConfig.height) return;
+    if (px < 0 || py < 0 || px > vipMapConfig.width || py > vipMapConfig.height) return null;
 
     const world = vipPixelToWorld(px, py);
-    document.getElementById("vipTeleportX").value = world.x.toFixed(2);
-    document.getElementById("vipTeleportY").value = world.y.toFixed(2);
+    return {
+        x: world.x.toFixed(2),
+        y: world.y.toFixed(2),
+        mapKey: vipSelectedMapKey,
+        partitionId: vipPartitionForMap(vipSelectedMapKey)
+    };
+}
+
+function confirmVipTeleportTarget(event) {
+    const target = vipMapEventToWorld(event);
+    if (!target) return;
+
+    const label = vipMapConfig.label || vipSelectedMapKey;
+    if (!confirm(`Use this ${label} map point for self teleport?\n\nX: ${target.x}\nY: ${target.y}\nPartition: ${target.partitionId}`)) {
+        return;
+    }
+
+    document.getElementById("vipTeleportX").value = target.x;
+    document.getElementById("vipTeleportY").value = target.y;
     document.getElementById("vipTeleportMapKey").value = vipSelectedMapKey;
-    document.getElementById("vipTeleportPartitionId").value = vipPartitionForMap(vipSelectedMapKey);
+    document.getElementById("vipTeleportPartitionId").value = target.partitionId;
+}
+
+function zoomVipMapAtPointer(event) {
+    const frame = document.getElementById("vipMapFrame");
+    const oldZoom = vipMapZoom;
+    const newZoom = Math.max(0.05, Math.min(1.00, oldZoom * (event.deltaY < 0 ? 1.12 : 0.88)));
+
+    const rect = frame.getBoundingClientRect();
+    const mapX = (frame.scrollLeft + (event.clientX - rect.left)) / oldZoom;
+    const mapY = (frame.scrollTop + (event.clientY - rect.top)) / oldZoom;
+
+    vipMapZoom = newZoom;
+    document.getElementById("vipMapZoom").value = Math.round(vipMapZoom * 100);
+    document.getElementById("vipZoomReadout").textContent = `${Math.round(vipMapZoom * 100)}%`;
+
+    refreshVipMapMarkers();
+
+    frame.scrollLeft = mapX * vipMapZoom - (event.clientX - rect.left);
+    frame.scrollTop = mapY * vipMapZoom - (event.clientY - rect.top);
+}
+
+function wireVipMapControls() {
+    const frame = document.getElementById("vipMapFrame");
+    if (!frame) return;
+
+    frame.addEventListener("wheel", function(event) {
+        if (!event.ctrlKey && !event.metaKey) {
+            return;
+        }
+        event.preventDefault();
+        zoomVipMapAtPointer(event);
+    }, { passive: false });
+
+    frame.addEventListener("mousedown", function(event) {
+        if (event.button !== 0) return;
+        vipMapDragging = true;
+        frame.classList.add("dragging");
+        vipMapDragStartX = event.clientX;
+        vipMapDragStartY = event.clientY;
+        vipMapDragScrollLeft = frame.scrollLeft;
+        vipMapDragScrollTop = frame.scrollTop;
+    });
+
+    window.addEventListener("mousemove", function(event) {
+        if (!vipMapDragging) return;
+        frame.scrollLeft = vipMapDragScrollLeft - (event.clientX - vipMapDragStartX);
+        frame.scrollTop = vipMapDragScrollTop - (event.clientY - vipMapDragStartY);
+    });
+
+    window.addEventListener("mouseup", function() {
+        vipMapDragging = false;
+        frame.classList.remove("dragging");
+    });
+
+    frame.addEventListener("dblclick", function(event) {
+        event.preventDefault();
+        confirmVipTeleportTarget(event);
+    });
 }
 
 async function loadVipCharacter() {
@@ -286,7 +390,7 @@ async function refreshVipMapMarkers() {
     });
 }
 
-document.getElementById("vipMapFrame").addEventListener("click", fillVipTeleportTarget);
+wireVipMapControls();
 
 document.getElementById("vipOverrepairForm").addEventListener("submit", async function(event) {
     event.preventDefault();

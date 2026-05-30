@@ -72,6 +72,58 @@
     width: auto;
     margin: 0;
 }
+
+.admin-main-layout {
+    display: grid;
+    grid-template-columns: minmax(480px, 1fr) minmax(520px, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.admin-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.admin-stack .box {
+    margin-bottom: 0;
+}
+
+.admin-tool-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 14px;
+    align-items: start;
+}
+
+.admin-tool-grid form {
+    border: 1px solid #222;
+    padding: 12px;
+    background: #060606;
+}
+
+.admin-tool-grid form + form {
+    border-top: 1px solid #222;
+    margin-top: 0;
+}
+
+.vehicle-workbench {
+    display: grid;
+    grid-template-columns: minmax(340px, 0.78fr) minmax(540px, 1.22fr);
+    gap: 16px;
+    align-items: start;
+}
+
+@media (max-width: 1100px) {
+    .admin-main-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .vehicle-workbench {
+        grid-template-columns: 1fr;
+    }
+}
 </style>
 {% endblock %}
 
@@ -80,7 +132,9 @@
 
 <div id="actionOutput" class="msg" style="display:none;"></div>
 
-<div class="grid">
+<div class="admin-main-layout">
+
+<div class="admin-stack">
 
 <div class="box">
 <h2>Overrepair Gear</h2>
@@ -99,14 +153,22 @@ If some items fail to overrepair, empty extra inventory, move failed items highe
         <option value="">Loading characters...</option>
     </select>
 
+    <div class="field-grid">
+    <div>
     <label>Character Actor ID</label>
     <input type="text" name="character_actor_id" id="overrepairActorId" placeholder="Example: 6" required>
+    </div>
 
+    <div>
     <label>Inventory ID</label>
     <input type="text" name="inventory_id" id="overrepairInventoryId" placeholder="Example: 1" required>
+    </div>
 
+    <div>
     <label>Durability Value</label>
     <input type="text" name="durability" value="{{ default_overrepair_durability }}" required>
+    </div>
+    </div>
 
     <button type="submit">Overrepair Gear</button>
 </form>
@@ -132,6 +194,8 @@ Automated buyback sweeps run once immediately when started, then use the interva
 </div>
 
 <form id="marketSeedForm">
+    <div class="field-grid">
+    <div>
     <label>Price Multiplier</label>
     <input
         type="number"
@@ -143,7 +207,9 @@ Automated buyback sweeps run once immediately when started, then use the interva
         value="{{ market_price_multiplier }}"
         oninput="loadMarketPresetPreview()"
         required>
+    </div>
 
+    <div>
     <label>Seed Exchange ID</label>
     <input
         type="number"
@@ -153,7 +219,9 @@ Automated buyback sweeps run once immediately when started, then use the interva
         step="1"
         value="{{ market_seed_exchange_id }}"
         placeholder="Example: 34">
+    </div>
 
+    <div>
     <label>Buyback Threshold Percent</label>
     <input
         type="number"
@@ -164,7 +232,9 @@ Automated buyback sweeps run once immediately when started, then use the interva
         step="1"
         value="{{ market_buy_threshold_percent }}"
         required>
+    </div>
 
+    <div>
     <label>Max Buys Per Sweep</label>
     <input
         type="number"
@@ -175,7 +245,9 @@ Automated buyback sweeps run once immediately when started, then use the interva
         step="1"
         value="{{ market_buy_max_per_click }}"
         required>
+    </div>
 
+    <div>
     <label>Buyback Interval Minutes</label>
     <input
         type="number"
@@ -186,6 +258,8 @@ Automated buyback sweeps run once immediately when started, then use the interva
         step="1"
         value="{{ market_buyback_interval_minutes }}"
         required>
+    </div>
+    </div>
 
     <label class="admin-inline-check">
         <input type="checkbox" name="clear_existing" value="1" checked>
@@ -195,37 +269,37 @@ Automated buyback sweeps run once immediately when started, then use the interva
     <button type="submit">Seed Preset Market</button>
 </form>
 
-<form id="marketClearNpcForm">
-    <button type="submit">Clear NPC Market Listings</button>
-</form>
+<div class="button-row">
+    <form id="marketClearNpcForm">
+        <button type="submit">Clear NPC Market Listings</button>
+    </form>
 
-<form id="marketBuyPlayerListingsForm">
-    <input type="hidden" name="price_multiplier" id="marketBuyPriceMultiplier" value="{{ market_price_multiplier }}">
-    <input type="hidden" name="threshold_percent" id="marketBuyThresholdHidden" value="{{ market_buy_threshold_percent }}">
-    <input type="hidden" name="max_buys" id="marketBuyMaxHidden" value="{{ market_buy_max_per_click }}">
-    <button type="submit">Buy Eligible Player Listings</button>
-</form>
+    <form id="marketBuyPlayerListingsForm">
+        <input type="hidden" name="price_multiplier" id="marketBuyPriceMultiplier" value="{{ market_price_multiplier }}">
+        <input type="hidden" name="threshold_percent" id="marketBuyThresholdHidden" value="{{ market_buy_threshold_percent }}">
+        <input type="hidden" name="max_buys" id="marketBuyMaxHidden" value="{{ market_buy_max_per_click }}">
+        <button type="submit">Buy Eligible Player Listings</button>
+    </form>
+</div>
 
 <div class="coord-box" id="marketBuybackStatus">
     Loading buyback automation status...
 </div>
 
-<form id="marketBuybackStartForm">
-    <input type="hidden" name="price_multiplier" id="marketBuybackStartMultiplier" value="{{ market_price_multiplier }}">
-    <input type="hidden" name="threshold_percent" id="marketBuybackStartThreshold" value="{{ market_buy_threshold_percent }}">
-    <input type="hidden" name="max_buys" id="marketBuybackStartMax" value="{{ market_buy_max_per_click }}">
-    <input type="hidden" name="interval_minutes" id="marketBuybackStartInterval" value="{{ market_buyback_interval_minutes }}">
-    <button type="submit">Start Buyback Sweep</button>
-</form>
+<div class="button-row">
+    <form id="marketBuybackStartForm">
+        <input type="hidden" name="price_multiplier" id="marketBuybackStartMultiplier" value="{{ market_price_multiplier }}">
+        <input type="hidden" name="threshold_percent" id="marketBuybackStartThreshold" value="{{ market_buy_threshold_percent }}">
+        <input type="hidden" name="max_buys" id="marketBuybackStartMax" value="{{ market_buy_max_per_click }}">
+        <input type="hidden" name="interval_minutes" id="marketBuybackStartInterval" value="{{ market_buyback_interval_minutes }}">
+        <button type="submit">Start Buyback Sweep</button>
+    </form>
 
-<form id="marketBuybackStopForm">
-    <button type="submit">Stop Buyback Sweep</button>
-</form>
+    <form id="marketBuybackStopForm">
+        <button type="submit">Stop Buyback Sweep</button>
+    </form>
 </div>
-
 </div>
-
-<div class="grid">
 
 <div class="box">
 <h2>Vehicle Module Repair</h2>
@@ -244,15 +318,211 @@ Recommended first use: test on a low-risk vehicle and confirm in-game behavior a
         <option value="">Loading vehicles...</option>
     </select>
 
+    <div class="field-grid">
+    <div>
     <label>Vehicle ID</label>
     <input type="text" name="vehicle_id" id="vehicleRepairId" placeholder="Example: 34" required>
+    </div>
 
+    <div>
     <label>Durability Value</label>
     <input type="text" name="durability" value="{{ default_vehicle_repair_durability }}" required>
+    </div>
+    </div>
 
     <button type="submit">Repair Vehicle Modules</button>
 </form>
 </div>
+
+</div>
+
+<div class="admin-stack">
+
+<div class="box">
+<h2>Admin Gifts & Progression</h2>
+
+<div class="warning">
+Admin-only helper tools.<br><br>
+Lasgun kit and Solaris grants use RedBlink's normal item grant command. Research points directly edit the selected character's progression JSON, so the character should be offline before changing points.
+</div>
+
+<div class="admin-tool-grid">
+
+<form id="lasgunBundleForm">
+    <label>Character</label>
+    <select id="lasgunCharacterSelect" onchange="fillLasgunPlayerId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Player / FLS ID</label>
+    <input type="text" name="player_id" id="lasgunPlayerId" required>
+
+    <div class="coord-box">
+        Grants: Experimental Lightning Gun, Lasgun Mod, Accuracy Mod, and Damage Mod.
+    </div>
+
+    <button type="submit">Grant Lightning Gun Kit</button>
+</form>
+
+<form id="researchPointsForm">
+    <label>Character</label>
+    <select id="researchCharacterSelect" onchange="fillResearchActorId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Character Actor ID</label>
+    <input type="text" name="character_actor_id" id="researchActorId" required>
+
+    <label>Research Points</label>
+    <input type="number" name="research_points" id="researchPointsValue" min="0" step="1" value="1000" required>
+
+    <button type="submit">Set Research Points</button>
+</form>
+
+<form id="characterXpForm">
+    <div class="warning">
+        Character XP controls the actual displayed character level and is separate from specialization XP. It caps at <b>{{ "{:,}".format(character_max_xp) }}</b> XP / level 200 and recalculates skill points plus research points from the new level.
+    </div>
+
+    <label>Character</label>
+    <select id="characterXpCharacterSelect" onchange="fillCharacterXpActorId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Character Actor ID</label>
+    <input type="text" name="character_actor_id" id="characterXpActorId" required>
+
+    <label>Character XP To Add</label>
+    <input type="number" name="xp_amount" id="characterXpAmount" min="1" max="{{ character_max_xp }}" step="1" value="1000" required>
+
+    <button type="submit">Give Character XP</button>
+</form>
+
+<form id="characterLevelForm">
+    <div class="warning">
+        Set Character Level uses the same level XP curve as Character XP, then recalculates skill points and research points. The character should be offline before changing level.
+    </div>
+
+    <label>Character</label>
+    <select id="characterLevelCharacterSelect" onchange="fillCharacterLevelActorId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Character Actor ID</label>
+    <input type="text" name="character_actor_id" id="characterLevelActorId" required>
+
+    <label>Target Character Level</label>
+    <input type="number" name="target_level" id="characterTargetLevel" min="1" max="{{ character_max_level }}" step="1" value="25" required>
+
+    <button type="submit">Set Character Level</button>
+</form>
+
+<form id="specializationXpForm">
+    <div class="warning">
+        WIP / unconfirmed: Specialization XP is separate from character level XP. This tool appears to create or update the expected database entries, but persistence and in-game behavior are not yet verified because current testing has not reached the required progression/faction access. Each specialization track appears capped at <b>{{ "{:,}".format(specialization_max_xp) }}</b> XP; stay at or below that per track while testing. After progression edits, a map restart or full battlegroup restart may be required; restarts can appear slow, and login may briefly show an error before recovering.
+    </div>
+
+    <label>Character</label>
+    <select id="xpCharacterSelect" onchange="fillXpControllerId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Player Controller ID</label>
+    <input type="text" name="player_controller_id" id="xpControllerId" required>
+
+    <label>XP Track</label>
+    <select name="track_type" id="xpTrackType" required>
+        {% for track in specialization_xp_tracks %}
+        <option value="{{ track }}">{{ track }}</option>
+        {% endfor %}
+    </select>
+
+    <label>XP To Add</label>
+    <input type="number" name="xp_amount" id="xpAmount" min="1" max="{{ specialization_max_xp }}" step="1" value="1000" required>
+
+    <button type="submit">Give XP</button>
+</form>
+
+<form id="specializationResetForm">
+    <div class="warning">
+        Reset Specialization deletes specialization XP rows. Selecting All also clears purchased specialization keystones, which is useful after testing but may require relogging, a map restart, or a full battlegroup restart before the UI catches up.
+    </div>
+
+    <label>Character</label>
+    <select id="specializationResetCharacterSelect" onchange="fillSpecializationResetControllerId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Player Controller ID</label>
+    <input type="text" name="player_controller_id" id="specializationResetControllerId" required>
+
+    <label>Reset Scope</label>
+    <select name="track_type" id="specializationResetTrackType" required>
+        <option value="all">All tracks and keystones</option>
+        {% for track in specialization_xp_tracks %}
+        <option value="{{ track }}">{{ track }} track only</option>
+        {% endfor %}
+    </select>
+
+    <button type="submit">Reset Specialization</button>
+</form>
+
+<form id="progressionPresetForm">
+    <div class="warning">
+        Experimental progression presets edit journey story-node completion state and should be used only while the player is offline. In normal play, journey nodes may also apply tags/flags, reveal quests or lore, advance tutorials, alter faction tier/reputation, or gate rewards and follow-up systems. This tool updates the journey rows we can safely target, but it may not reproduce every side effect from live gameplay. Relog after applying or resetting. A map restart or full battlegroup restart may be required; restarts can appear to take a long time, and login may briefly show an error before recovering.
+    </div>
+
+    <label>Character</label>
+    <select id="progressionCharacterSelect" onchange="fillProgressionPlayerId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Player / FLS ID</label>
+    <input type="text" name="fls_id" id="progressionPlayerId" required>
+
+    <label>Preset</label>
+    <select name="preset_id" id="progressionPresetId" required>
+        {% for preset in progression_presets %}
+        <option value="{{ preset.id }}">{{ preset.name }} - {{ preset.description }}</option>
+        {% endfor %}
+    </select>
+
+    <label>Action</label>
+    <select name="action" id="progressionPresetAction" required>
+        <option value="apply">Apply / unlock preset</option>
+        <option value="reset">Reset preset completion</option>
+    </select>
+
+    <button type="submit">Run Progression Preset</button>
+</form>
+
+<form id="solariGrantForm">
+    <label>Character</label>
+    <select id="solariCharacterSelect" onchange="fillSolariPlayerId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Player / FLS ID</label>
+    <input type="text" name="player_id" id="solariPlayerId" required>
+
+    <label>SolarisCoin Amount</label>
+    <select name="amount" id="solariAmount" required>
+        {% for amount in solaris_grant_amounts %}
+        <option value="{{ amount }}">{{ "{:,}".format(amount) }}</option>
+        {% endfor %}
+    </select>
+
+    <button type="submit">Grant SolarisCoin</button>
+</form>
+
+</div>
+</div>
+
+</div>
+
+</div>
+
+<div class="vehicle-workbench">
 
 <div class="box">
 <h2>Vehicle Teleport</h2>
@@ -350,6 +620,104 @@ overrepairForm.addEventListener("submit", async function(event) {
     }
 
     await postForm("/api/overrepair", overrepairForm);
+});
+
+const lasgunBundleForm = document.getElementById("lasgunBundleForm");
+lasgunBundleForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    if (!confirm("Grant the Experimental Lightning Gun and three augments to this character using the item grant command?")) {
+        return;
+    }
+
+    await postForm("/api/grant-lasgun-augment-bundle", lasgunBundleForm);
+});
+
+const researchPointsForm = document.getElementById("researchPointsForm");
+researchPointsForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const points = document.getElementById("researchPointsValue").value || "0";
+    if (!confirm(`This directly edits the selected character's research points to ${points}. The character should be offline. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/set-research-points", researchPointsForm);
+});
+
+const characterXpForm = document.getElementById("characterXpForm");
+characterXpForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const amount = document.getElementById("characterXpAmount").value || "0";
+    if (!confirm(`Add ${amount} character XP to this character? This affects actual character level, skill points, and research points. The character should be offline. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/give-character-xp", characterXpForm);
+});
+
+const characterLevelForm = document.getElementById("characterLevelForm");
+characterLevelForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const level = document.getElementById("characterTargetLevel").value || "0";
+    if (!confirm(`Set this character to level ${level}? This rewrites character XP, skill points, and research points. The character should be offline. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/set-character-level", characterLevelForm);
+});
+
+const specializationXpForm = document.getElementById("specializationXpForm");
+specializationXpForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const amount = document.getElementById("xpAmount").value || "0";
+    const track = document.getElementById("xpTrackType").value || "selected";
+    if (!confirm(`Add ${amount} ${track} XP to this character? The character should be offline before changing progression. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/give-specialization-xp", specializationXpForm);
+});
+
+const specializationResetForm = document.getElementById("specializationResetForm");
+specializationResetForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const track = document.getElementById("specializationResetTrackType").value || "selected";
+    if (!confirm(`Reset ${track} specialization data for this character? The character should be offline. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/reset-specialization", specializationResetForm);
+});
+
+const progressionPresetForm = document.getElementById("progressionPresetForm");
+progressionPresetForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const action = document.getElementById("progressionPresetAction").value || "apply";
+    const preset = document.getElementById("progressionPresetId");
+    const label = preset && preset.selectedOptions.length ? preset.selectedOptions[0].textContent : "selected preset";
+    if (!confirm(`${action === "reset" ? "Reset" : "Apply"} progression preset: ${label}? Player must be offline, and journey side effects may not be fully reproduced. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/progression-preset", progressionPresetForm);
+});
+
+const solariGrantForm = document.getElementById("solariGrantForm");
+solariGrantForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const amount = document.getElementById("solariAmount").value || "0";
+    if (!confirm(`Grant ${amount} SolarisCoin to this character using the item grant command?`)) {
+        return;
+    }
+
+    await postForm("/api/grant-solari", solariGrantForm);
 });
 
 const vehicleRepairForm = document.getElementById("vehicleRepairForm");

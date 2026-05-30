@@ -2,37 +2,36 @@
 {% block title %}User Management{% endblock %}
 
 {% block content %}
-<div class="box">
 <h1>User Management</h1>
 
-<h2>Create User</h2>
-<form method="post" action="/users/add">
-    <input name="username" placeholder="Username">
-    <input name="password" placeholder="Password">
-    <input name="character_name" placeholder="Exact in-game character name for VIP/self-service">
-    <select name="role">
-        <option value="viewer">viewer</option>
-        <option value="vip">vip</option>
-        <option value="operator">operator</option>
-        <option value="admin">admin</option>
-    </select>
-    <button>Create</button>
-</form>
-</div>
+<div class="grid-wide">
 
 <div class="box">
-<h2>Existing Users</h2>
+<h2>User List</h2>
 
-{% for user in users %}
-<div class="user-row">
-    <b>{{ user.username }}</b> - {{ user.role }}
-    {% if user.character_name %}
-    <br>Character: {{ user.character_name }}
-    {% endif %}
+<label>Select User</label>
+<select id="userPicker" onchange="selectManagedUser()">
+    <option value="">Choose a user...</option>
+    {% for user in users %}
+    <option
+        value="{{ user.id }}"
+        data-username="{{ user.username }}"
+        data-role="{{ user.role }}"
+        data-character="{{ user.character_name }}">
+        {{ user.username }} - {{ user.role }}{% if user.character_name %} - {{ user.character_name }}{% endif %}
+    </option>
+    {% endfor %}
+</select>
 
+<div id="selectedUserPanel" class="selected">
+    Select a user to populate the management forms.
+</div>
+
+<div class="section-grid">
     <form method="post" action="/users/role">
-        <input type="hidden" name="user_id" value="{{ user.id }}">
-        <select name="role">
+        <input type="hidden" name="user_id" id="roleUserId">
+        <label>Role</label>
+        <select name="role" id="selectedUserRole">
             <option value="viewer">viewer</option>
             <option value="vip">vip</option>
             <option value="operator">operator</option>
@@ -42,22 +41,105 @@
     </form>
 
     <form method="post" action="/users/character">
-        <input type="hidden" name="user_id" value="{{ user.id }}">
-        <input name="character_name" value="{{ user.character_name }}" placeholder="Exact in-game character name">
+        <input type="hidden" name="user_id" id="characterUserId">
+        <label>Linked Character</label>
+        <input name="character_name" id="selectedUserCharacter" placeholder="Exact in-game character name">
         <button>Update Character Link</button>
     </form>
 
     <form method="post" action="/users/password">
-        <input type="hidden" name="user_id" value="{{ user.id }}">
+        <input type="hidden" name="user_id" id="passwordUserId">
+        <label>New Password</label>
         <input name="password" placeholder="New password">
         <button>Reset Password</button>
     </form>
 
-    <form method="post" action="/users/delete">
-        <input type="hidden" name="user_id" value="{{ user.id }}">
-        <button>Delete User</button>
+    <form method="post" action="/users/delete" onsubmit="return confirmDeleteSelectedUser()">
+        <input type="hidden" name="user_id" id="deleteUserId">
+        <label>Delete</label>
+        <button>Delete Selected User</button>
     </form>
 </div>
-{% endfor %}
 </div>
+
+<div class="box">
+<h2>Create User</h2>
+<form method="post" action="/users/add">
+    <label>Username</label>
+    <input name="username" placeholder="Username">
+
+    <label>Password</label>
+    <input name="password" placeholder="Password">
+
+    <label>Linked Character</label>
+    <input name="character_name" placeholder="Exact in-game character name for VIP/self-service">
+
+    <label>Role</label>
+    <select name="role">
+        <option value="viewer">viewer</option>
+        <option value="vip">vip</option>
+        <option value="operator">operator</option>
+        <option value="admin">admin</option>
+    </select>
+    <button>Create User</button>
+</form>
+</div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function escapeUserHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+function setManagedUserId(id) {
+    ["roleUserId", "characterUserId", "passwordUserId", "deleteUserId"].forEach(inputId => {
+        const input = document.getElementById(inputId);
+        if (input) input.value = id || "";
+    });
+}
+
+function selectManagedUser() {
+    const picker = document.getElementById("userPicker");
+    const option = picker.selectedOptions[0];
+    const panel = document.getElementById("selectedUserPanel");
+
+    if (!option || !option.value) {
+        setManagedUserId("");
+        panel.textContent = "Select a user to populate the management forms.";
+        return;
+    }
+
+    const username = option.dataset.username || "";
+    const role = option.dataset.role || "viewer";
+    const character = option.dataset.character || "";
+
+    setManagedUserId(option.value);
+    document.getElementById("selectedUserRole").value = role;
+    document.getElementById("selectedUserCharacter").value = character;
+
+    panel.innerHTML = `
+        <b>${escapeUserHtml(username)}</b><br>
+        <span class="role-pill role-${role}">${escapeUserHtml(role)}</span>
+        ${character ? `<br>Character: ${escapeUserHtml(character)}` : "<br>No linked character"}
+    `;
+}
+
+function confirmDeleteSelectedUser() {
+    const picker = document.getElementById("userPicker");
+    const option = picker.selectedOptions[0];
+    if (!option || !option.value) {
+        alert("Select a user first.");
+        return false;
+    }
+    return confirm(`Delete ${option.dataset.username || "selected user"}?`);
+}
+</script>
 {% endblock %}

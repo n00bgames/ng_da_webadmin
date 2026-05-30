@@ -1,14 +1,14 @@
 <h1 align="center">Easy Dune Admin</h1>
 
 <p align="center">
-  Companion administration platform for RedBlink's Dune Awakening self-hosted Docker stack.
+  Independent companion administration platform for RedBlink's Dune Awakening self-hosted Docker stack.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.6.6--rc2-orange">
+  <img src="https://img.shields.io/badge/version-0.7.0--beta-blue">
   <img src="https://img.shields.io/badge/license-GPLv3-green">
   <img src="https://img.shields.io/badge/RedBlink-v1.3.2-blue">
-  <img src="https://img.shields.io/badge/status-release%20candidate-orange">
+  <img src="https://img.shields.io/badge/status-beta-orange">
   <img src="https://img.shields.io/badge/platform-Linux-lightgrey">
   <img src="https://img.shields.io/badge/python-3.11+-blue">
 </p>
@@ -21,11 +21,18 @@
 
 ## Status
 
-Current panel version: `0.6.6-rc2`
+Current panel version: `0.7.0-beta`
 
 Target RedBlink Stack: `v1.3.2`
 
-This release candidate is intended for private/LAN/VPN-hosted self-hosted servers.
+This beta is intended for private/LAN/VPN-hosted self-hosted servers.
+
+Easy Dune Admin is an independent webadmin project built to support
+RedBlink's MIT-licensed
+[`dune-awakening-selfhost-docker`](https://github.com/Red-Blink/dune-awakening-selfhost-docker)
+stack. Development is being continued with RedBlink's blessing/request for a
+fuller webadmin, while keeping RedBlink's stack, scripts, command workflows,
+and contributors credited where they are used or targeted.
 
 ---
 
@@ -95,6 +102,15 @@ This release candidate is intended for private/LAN/VPN-hosted self-hosted server
 - Mk6 Scout Ornithopter grant
 - Mk6 Medium Ornithopter grant
 - Medium thopter kit includes 250 rockets
+- Admin-only Lightning Gun kit grant using the normal RedBlink item grant command
+- Admin-only SolarisCoin grant with preset amount dropdown
+- Admin-only research point setter for selected characters
+- Admin-only character XP grant for the actual displayed character level
+- Admin-only set character level tool using the same level XP curve
+- WIP/unconfirmed admin-only specialization XP grant for Combat, Crafting, Gathering, Exploration, and Sabotage tracks. It appears to create/update the expected database entries, but persistence and in-game behavior still need confirmation after reaching the required progression/faction access.
+- Admin-only specialization reset for one track or all tracks plus keystones
+- Experimental admin-only progression preset apply/reset tools for curated journey roots
+- Progression edits may require relogging, restarting the affected map, or restarting the battlegroup. Restarts can appear slow, and login may briefly show an error before recovering.
 
 ### Market Tools
 
@@ -270,7 +286,7 @@ export REDBLINK_INSTALL_DIR=/path/to/dune-awakening-selfhost-docker
 Before replacing a running copy, back it up:
 
 ```bash
-cp -a ~/dune-admin-web ~/dune-admin-web.backup-before-0.6.6-rc2
+cp -a ~/dune-admin-web ~/dune-admin-web.backup-before-0.7.0-beta
 ```
 
 Preserve local runtime data:
@@ -368,15 +384,17 @@ Viewer accounts are intentionally privacy-limited. They can see viewer-safe stat
 
 See `CHANGELOG.md` for full release history.
 
-Current highlight for `0.6.6-rc2`: Easy Dune Admin branding, VIP self-service tools, admin vehicle teleport refinements, and IceHunter-attributed market seeding/cleanup tools.
+Current highlight for `0.7.0-beta`: the former `app.py` monolith is split into a small launcher, shared core helpers, and route registrations so future admin tools are easier to maintain.
+
+Looking ahead: faction manipulation tools are a likely `0.7.1` focus after faction membership and the related database state can be captured and tested safely.
 
 ---
 
 ## Credits
 
-- RedBlink and contributors
+- RedBlink and contributors for the MIT-licensed [`dune-awakening-selfhost-docker`](https://github.com/Red-Blink/dune-awakening-selfhost-docker) stack this panel targets. This project is being developed with RedBlink's blessing/request for a fuller companion webadmin; Easy Dune Admin remains an independent project and credits RedBlink's stack, scripts, and command workflows where used.
 - Funcom
-- IceHunter / Ryan Wilson's MIT-licensed `dune-admin` project for market tooling research, category mapping, and bundled market item data.
+- IceHunter / Ryan Wilson's MIT-licensed [`dune-admin`](https://github.com/Icehunter/dune-admin) project for market tooling research, category mapping, bundled market item data, progression preset structure, specialization XP research, and character-level XP curve research.
 - Community researchers and testers
 
 ---

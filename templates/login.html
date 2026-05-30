@@ -1,7 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Dune Admin Login{% endblock %}
 
+{% block head_extra %}
+<style>
+.login-shell {
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+.login-logo {
+    width: 100%;
+    height: auto;
+    display: block;
+    margin-bottom: 16px;
+    border: 1px solid #3a2a12;
+    box-shadow: 0 0 18px rgba(255,140,0,0.12);
+}
+</style>
+{% endblock %}
+
 {% block content %}
+<div class="login-shell">
+<img class="login-logo" src="/static/dune-admin.png" alt="Easy Dune Admin">
+
 <div class="box">
 <h1>Dune Admin Login</h1>
 
@@ -10,5 +31,6 @@
     <input type="password" name="password" placeholder="Password">
     <button>Login</button>
 </form>
+</div>
 </div>
 {% endblock %}

@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html>
 <head>
 <title>{% block title %}Easy Dune Admin{% endblock %}</title>
@@ -79,27 +79,107 @@ body {
 }
 
 .container {
-    padding: 24px;
+    padding: 20px 24px;
 }
 
 .grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 24px;
+    gap: 16px;
+    align-items: start;
+}
+
+.grid-wide {
+    display: grid;
+    grid-template-columns: minmax(360px, 0.82fr) minmax(520px, 1.18fr);
+    gap: 16px;
+    align-items: start;
+}
+
+.compact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+    align-items: start;
+}
+
+.section-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+    align-items: start;
+}
+
+.field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px 12px;
+    align-items: end;
+}
+
+.field-grid label,
+.field-grid input,
+.field-grid select {
+    margin-bottom: 0;
+}
+
+.button-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    align-items: end;
+}
+
+.button-row form,
+.button-row button {
+    margin: 0;
 }
 
 .card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: 20px;
+    gap: 16px;
 }
 
 .box, .card {
     background: #080808;
     border: 1px solid #333;
-    padding: 20px;
-    margin-bottom: 24px;
+    padding: 16px;
+    margin-bottom: 16px;
     box-shadow: 0 0 18px rgba(255,140,0,0.08);
+}
+
+.box h1,
+.box h2,
+.box h3,
+.card h1,
+.card h2,
+.card h3 {
+    margin-top: 0;
+}
+
+.box form + form {
+    border-top: 1px solid #222;
+    margin-top: 14px;
+    padding-top: 14px;
+}
+
+.box .button-row form,
+.box .button-row form + form,
+.box .section-grid form + form {
+    border-top: 0;
+    margin-top: 0;
+    padding-top: 0;
+}
+
+.button-row button {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.box .box {
+    margin-bottom: 12px;
+    box-shadow: none;
 }
 
 input, button, select {
@@ -108,9 +188,9 @@ input, button, select {
     background: #111;
     color: #ccc;
     border: 1px solid #444;
-    padding: 12px;
-    margin-top: 8px;
-    margin-bottom: 16px;
+    padding: 10px;
+    margin-top: 6px;
+    margin-bottom: 10px;
     font-size: 18px;
 }
 
@@ -152,8 +232,48 @@ button:hover {
     background: #1a0f05;
     border: 1px solid #6a4a18;
     color: #e0c28f;
-    padding: 12px;
-    margin-bottom: 16px;
+    padding: 10px;
+    margin-bottom: 12px;
+}
+
+.role-pill {
+    display: inline-block;
+    padding: 4px 8px;
+    border: 1px solid #444;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: bold;
+    color: #ddd;
+    background: #111;
+}
+
+.role-admin {
+    color: #ffd6d6;
+    border-color: #b73838;
+    background: #2a0707;
+}
+
+.role-operator {
+    color: #ffe7a3;
+    border-color: #c6952c;
+    background: #2a1d05;
+}
+
+.role-vip {
+    color: #caffca;
+    border-color: #3d9b47;
+    background: #08260c;
+}
+
+.role-viewer {
+    color: #cfe6ff;
+    border-color: #3f7fb9;
+    background: #06182a;
+}
+
+.role-unlinked {
+    color: #ccc;
+    border-color: #555;
 }
 
 .placeholder-map {
@@ -181,12 +301,27 @@ a:hover {
 
 .footer {
     color: #777;
-    padding: 24px;
+    padding: 20px 24px;
     font-size: 14px;
+    border-top: 1px solid #222;
+}
+
+.footer-online {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.footer-online-title {
+    color: #d2b07a;
+    font-weight: bold;
+    margin-right: 4px;
 }
 
 @media (max-width: 1000px) {
-    .grid {
+    .grid,
+    .grid-wide {
         grid-template-columns: 1fr;
     }
 
@@ -238,8 +373,61 @@ a:hover {
 </div>
 
 <div class="footer">
+    {% if session.user %}
+    <div class="footer-online" id="footerOnlineUsers">
+        <span class="footer-online-title">Online Users:</span>
+        <span>Loading...</span>
+    </div>
+    {% endif %}
     Easy Dune Admin {{ panel_version }} - RedBlink Stack {{ redblink_stack_version }}
 </div>
+
+{% if session.user %}
+<script>
+function footerEscapeHtml(value) {
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+async function refreshFooterOnlineUsers() {
+    const panel = document.getElementById("footerOnlineUsers");
+    if (!panel) return;
+
+    try {
+        const response = await fetch("/api/footer-online-users");
+        const data = await response.json();
+        const users = data.users || [];
+        const title = `<span class="footer-online-title">Online Users:</span>`;
+
+        if (!data.ok) {
+            panel.innerHTML = `${title}<span>Unavailable</span>`;
+            return;
+        }
+
+        if (users.length === 0) {
+            panel.innerHTML = `${title}<span>No linked users online</span>`;
+            return;
+        }
+
+        panel.innerHTML = title + users.map(user => {
+            const role = user.role || "unlinked";
+            const roleClass = ["admin", "operator", "vip", "viewer"].includes(role) ? role : "unlinked";
+            const label = `${user.username || user.character_name || "Unknown"}${user.character_name ? " / " + user.character_name : ""}`;
+            return `<span class="role-pill role-${roleClass}">${footerEscapeHtml(label)} - ${footerEscapeHtml(role)}</span>`;
+        }).join("");
+    } catch (err) {
+        panel.innerHTML = `<span class="footer-online-title">Online Users:</span><span>Unavailable</span>`;
+    }
+}
+
+refreshFooterOnlineUsers();
+setInterval(refreshFooterOnlineUsers, 30000);
+</script>
+{% endif %}
 
 {% block scripts %}{% endblock %}
 </body>
