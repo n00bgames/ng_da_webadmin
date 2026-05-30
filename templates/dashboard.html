@@ -163,6 +163,15 @@
         <p><a href="/map">Open Live Map</a></p>
     </div>
 
+    {% if session.role == "vip" or session.role == "admin" %}
+    <div class="card">
+        <h2>VIP Tools</h2>
+        <p>Self-service overrepair and offline teleport for your linked character.</p>
+        <p><a href="/vip">Open VIP Tools</a></p>
+    </div>
+    {% endif %}
+
+    {% if session.role == "operator" or session.role == "admin" %}
     <div class="card">
         <h2>Item Grants</h2>
         <p>Search items, grant items, and grant thopter kits.</p>
@@ -174,7 +183,9 @@
         <p>Spawn maps and restart RedBlink services.</p>
         <p><a href="/server">Open Server Management</a></p>
     </div>
+    {% endif %}
 
+    {% if session.role == "admin" %}
     <div class="card">
         <h2>Admin Panel</h2>
         <p>Run admin-only utilities such as overrepair.</p>
@@ -186,12 +197,13 @@
         <p>Host diagnostics, RedBlink stack installer, and optional browser shell.</p>
         <p><a href="/infrastructure">Open Infrastructure</a></p>
     </div>
+    {% endif %}
 </div>
 
 <div class="box">
 <h2>Version</h2>
 <p>Panel: {{ panel_version }}</p>
-<p>RedBlink Stack Target: {{ redblink_version }}</p>
+<p>RedBlink Stack Target: {{ redblink_stack_version }}</p>
 <p>Role: {{ session.role }}</p>
 </div>
 {% endblock %}

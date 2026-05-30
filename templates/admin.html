@@ -60,6 +60,18 @@
     color: #d8d8d8;
     font-size: 0.95rem;
 }
+
+.admin-inline-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 8px 0 16px;
+}
+
+.admin-inline-check input {
+    width: auto;
+    margin: 0;
+}
 </style>
 {% endblock %}
 
@@ -76,7 +88,8 @@
 <div class="warning">
 This directly edits the database.<br><br>
 The character must be logged off before running this.<br>
-Items must be unequipped and in the character inventory.
+Items must be unequipped and in the character inventory.<br><br>
+If some items fail to overrepair, empty extra inventory, move failed items higher in the bag, equip items that worked, retry, and verify the SQL output.
 </div>
 
 <form id="overrepairForm">
@@ -98,6 +111,121 @@ Items must be unequipped and in the character inventory.
     <button type="submit">Overrepair Gear</button>
 </form>
 </div>
+
+<div class="box">
+<h2>Preset Market Seed</h2>
+
+<div class="warning">
+Experimental admin-only market tool based on IceHunter's MIT-licensed marketbot research, with attribution in the README.<br><br>
+Seeds the exchange with NPC listings owned by the <b>{{ market_bot_class }}</b> bot actor: 2 of each equippable item, 2 of each schematic, and {{ market_resource_stack_size }} of each resource-like stackable.<br><br>
+Vehicle mobility parts with names or IDs containing wing, track, or locomotion are boosted to 8 listings.<br><br>
+Refined resources are priced 2.5x higher than the normal resource baseline.<br><br>
+Raw resources are priced 5x higher, with targeted exceptions: Spice Sand/Residue and Agave Seeds 10x, Titanium Ore and Stravidium Mass 8x, Basalt Stone 0.2x.<br><br>
+Prices use the multiplier below, defaulting to <b>{{ market_price_multiplier }}x</b>, so Solari keeps value. The clear controls affect only this bot's NPC listings; they do not remove player listings.
+<br><br>
+<b>{{ market_bot_class }}</b> can also buy player listings priced at or below the configured percent of what this preset would list the same item for.
+Automated buyback sweeps run once immediately when started, then use the interval below while Easy Dune Admin is running.
+</div>
+
+<div class="coord-box" id="marketPresetPreview">
+    Loading market seed preview...
+</div>
+
+<form id="marketSeedForm">
+    <label>Price Multiplier</label>
+    <input
+        type="number"
+        name="price_multiplier"
+        id="marketPriceMultiplier"
+        min="1"
+        max="10000"
+        step="1"
+        value="{{ market_price_multiplier }}"
+        oninput="loadMarketPresetPreview()"
+        required>
+
+    <label>Seed Exchange ID</label>
+    <input
+        type="number"
+        name="exchange_id"
+        id="marketSeedExchangeId"
+        min="1"
+        step="1"
+        value="{{ market_seed_exchange_id }}"
+        placeholder="Example: 34">
+
+    <label>Buyback Threshold Percent</label>
+    <input
+        type="number"
+        name="threshold_percent"
+        id="marketBuyThresholdPercent"
+        min="1"
+        max="100"
+        step="1"
+        value="{{ market_buy_threshold_percent }}"
+        required>
+
+    <label>Max Buys Per Sweep</label>
+    <input
+        type="number"
+        name="max_buys"
+        id="marketBuyMaxBuys"
+        min="1"
+        max="5000"
+        step="1"
+        value="{{ market_buy_max_per_click }}"
+        required>
+
+    <label>Buyback Interval Minutes</label>
+    <input
+        type="number"
+        name="interval_minutes"
+        id="marketBuybackIntervalMinutes"
+        min="1"
+        max="1440"
+        step="1"
+        value="{{ market_buyback_interval_minutes }}"
+        required>
+
+    <label class="admin-inline-check">
+        <input type="checkbox" name="clear_existing" value="1" checked>
+        <span>Clear existing {{ market_bot_class }} NPC listings before seeding</span>
+    </label>
+
+    <button type="submit">Seed Preset Market</button>
+</form>
+
+<form id="marketClearNpcForm">
+    <button type="submit">Clear NPC Market Listings</button>
+</form>
+
+<form id="marketBuyPlayerListingsForm">
+    <input type="hidden" name="price_multiplier" id="marketBuyPriceMultiplier" value="{{ market_price_multiplier }}">
+    <input type="hidden" name="threshold_percent" id="marketBuyThresholdHidden" value="{{ market_buy_threshold_percent }}">
+    <input type="hidden" name="max_buys" id="marketBuyMaxHidden" value="{{ market_buy_max_per_click }}">
+    <button type="submit">Buy Eligible Player Listings</button>
+</form>
+
+<div class="coord-box" id="marketBuybackStatus">
+    Loading buyback automation status...
+</div>
+
+<form id="marketBuybackStartForm">
+    <input type="hidden" name="price_multiplier" id="marketBuybackStartMultiplier" value="{{ market_price_multiplier }}">
+    <input type="hidden" name="threshold_percent" id="marketBuybackStartThreshold" value="{{ market_buy_threshold_percent }}">
+    <input type="hidden" name="max_buys" id="marketBuybackStartMax" value="{{ market_buy_max_per_click }}">
+    <input type="hidden" name="interval_minutes" id="marketBuybackStartInterval" value="{{ market_buyback_interval_minutes }}">
+    <button type="submit">Start Buyback Sweep</button>
+</form>
+
+<form id="marketBuybackStopForm">
+    <button type="submit">Stop Buyback Sweep</button>
+</form>
+</div>
+
+</div>
+
+<div class="grid">
 
 <div class="box">
 <h2>Vehicle Module Repair</h2>
@@ -125,10 +253,6 @@ Recommended first use: test on a low-risk vehicle and confirm in-game behavior a
     <button type="submit">Repair Vehicle Modules</button>
 </form>
 </div>
-
-</div>
-
-<div class="grid">
 
 <div class="box">
 <h2>Vehicle Teleport</h2>
@@ -214,6 +338,8 @@ loadCharactersForAdminPage();
 loadVehiclesForAdminPage();
 loadOrnithoptersForAdminPage();
 wireOrnithopterAdminMapControls();
+loadMarketPresetPreview();
+refreshMarketBuybackStatus();
 
 const overrepairForm = document.getElementById("overrepairForm");
 overrepairForm.addEventListener("submit", async function(event) {
@@ -235,6 +361,107 @@ vehicleRepairForm.addEventListener("submit", async function(event) {
     }
 
     await postForm("/api/repair-vehicle", vehicleRepairForm);
+});
+
+const marketSeedForm = document.getElementById("marketSeedForm");
+marketSeedForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const exchangeInput = document.getElementById("marketSeedExchangeId");
+    const exchangeNote = exchangeInput && exchangeInput.value ? ` exchange ${exchangeInput.value}` : " the default Global exchange";
+    if (!confirm(`This creates many NPC exchange listings on ${exchangeNote}. The checked option clears only the market bot's existing NPC listings before reseeding. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/market-seed-preset", marketSeedForm);
+    await loadMarketPresetPreview();
+});
+
+const marketClearNpcForm = document.getElementById("marketClearNpcForm");
+marketClearNpcForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    if (!confirm("This clears only the market bot's NPC listings and does not relist anything. Player listings are not removed. Continue?")) {
+        return;
+    }
+
+    await postForm("/api/market-clear-npc", marketClearNpcForm);
+    await loadMarketPresetPreview();
+});
+
+const marketBuyPlayerListingsForm = document.getElementById("marketBuyPlayerListingsForm");
+marketBuyPlayerListingsForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const multiplierInput = document.getElementById("marketPriceMultiplier");
+    const hiddenMultiplier = document.getElementById("marketBuyPriceMultiplier");
+    if (multiplierInput && hiddenMultiplier) {
+        hiddenMultiplier.value = multiplierInput.value || "{{ market_price_multiplier }}";
+    }
+
+    const thresholdInput = document.getElementById("marketBuyThresholdPercent");
+    const hiddenThreshold = document.getElementById("marketBuyThresholdHidden");
+    if (thresholdInput && hiddenThreshold) {
+        hiddenThreshold.value = thresholdInput.value || "{{ market_buy_threshold_percent }}";
+    }
+
+    const maxInput = document.getElementById("marketBuyMaxBuys");
+    const hiddenMax = document.getElementById("marketBuyMaxHidden");
+    if (maxInput && hiddenMax) {
+        hiddenMax.value = maxInput.value || "{{ market_buy_max_per_click }}";
+    }
+
+    if (!confirm(`This lets {{ market_bot_class }} buy up to ${hiddenMax.value} player listings priced at or below ${hiddenThreshold.value}% of the current preset price. Eligible player sell orders will be removed and sellers will get completed-order Solari claims. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/market-buy-player-listings", marketBuyPlayerListingsForm);
+    await loadMarketPresetPreview();
+    await refreshMarketBuybackStatus();
+});
+
+const marketBuybackStartForm = document.getElementById("marketBuybackStartForm");
+marketBuybackStartForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const multiplierInput = document.getElementById("marketPriceMultiplier");
+    const hiddenMultiplier = document.getElementById("marketBuybackStartMultiplier");
+    if (multiplierInput && hiddenMultiplier) {
+        hiddenMultiplier.value = multiplierInput.value || "{{ market_price_multiplier }}";
+    }
+
+    const thresholdInput = document.getElementById("marketBuyThresholdPercent");
+    const hiddenThreshold = document.getElementById("marketBuybackStartThreshold");
+    if (thresholdInput && hiddenThreshold) {
+        hiddenThreshold.value = thresholdInput.value || "{{ market_buy_threshold_percent }}";
+    }
+
+    const maxInput = document.getElementById("marketBuyMaxBuys");
+    const hiddenMax = document.getElementById("marketBuybackStartMax");
+    if (maxInput && hiddenMax) {
+        hiddenMax.value = maxInput.value || "{{ market_buy_max_per_click }}";
+    }
+
+    const intervalInput = document.getElementById("marketBuybackIntervalMinutes");
+    const hiddenInterval = document.getElementById("marketBuybackStartInterval");
+    if (intervalInput && hiddenInterval) {
+        hiddenInterval.value = intervalInput.value || "{{ market_buyback_interval_minutes }}";
+    }
+
+    if (!confirm(`Start automated {{ market_bot_class }} buyback sweeps every ${hiddenInterval.value} minutes at ${hiddenThreshold.value}% threshold, max ${hiddenMax.value} buys per sweep? It will run once immediately, then continue on the interval.`)) {
+        return;
+    }
+
+    await postForm("/api/market-buyback-start", marketBuybackStartForm);
+    await refreshMarketBuybackStatus();
+});
+
+const marketBuybackStopForm = document.getElementById("marketBuybackStopForm");
+marketBuybackStopForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    await postForm("/api/market-buyback-stop", marketBuybackStopForm);
+    await refreshMarketBuybackStatus();
 });
 
 const ornithopterTeleportForm = document.getElementById("ornithopterTeleportForm");

@@ -9,8 +9,10 @@
 <form method="post" action="/users/add">
     <input name="username" placeholder="Username">
     <input name="password" placeholder="Password">
+    <input name="character_name" placeholder="Exact in-game character name for VIP/self-service">
     <select name="role">
         <option value="viewer">viewer</option>
+        <option value="vip">vip</option>
         <option value="operator">operator</option>
         <option value="admin">admin</option>
     </select>
@@ -23,16 +25,26 @@
 
 {% for user in users %}
 <div class="user-row">
-    <b>{{ user.username }}</b> — {{ user.role }}
+    <b>{{ user.username }}</b> - {{ user.role }}
+    {% if user.character_name %}
+    <br>Character: {{ user.character_name }}
+    {% endif %}
 
     <form method="post" action="/users/role">
         <input type="hidden" name="user_id" value="{{ user.id }}">
         <select name="role">
             <option value="viewer">viewer</option>
+            <option value="vip">vip</option>
             <option value="operator">operator</option>
             <option value="admin">admin</option>
         </select>
         <button>Change Role</button>
+    </form>
+
+    <form method="post" action="/users/character">
+        <input type="hidden" name="user_id" value="{{ user.id }}">
+        <input name="character_name" value="{{ user.character_name }}" placeholder="Exact in-game character name">
+        <button>Update Character Link</button>
     </form>
 
     <form method="post" action="/users/password">

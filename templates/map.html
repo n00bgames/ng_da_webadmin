@@ -189,7 +189,7 @@ Scroll normally to move down the page. Hold <b>Ctrl</b> on Windows/Linux or <b>C
         Loading markers...
     </div>
 
-    {% if session.role != "viewer" %}
+    {% if session.role == "operator" or session.role == "admin" %}
     <h2>Offline Teleport</h2>
     <div class="warning">
         Use only for offline characters. Click a player marker to fill this form, or enter values manually.

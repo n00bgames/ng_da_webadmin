@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================
-# n00bGame Dune Awakening Web-Admin Restart Script
+# Easy Dune Admin Restart Script
 # =========================================================
 
 cd "$(dirname "$0")"

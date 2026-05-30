@@ -1,0 +1,318 @@
+{% extends "base.html" %}
+{% block title %}VIP Tools{% endblock %}
+
+{% block head_extra %}
+<style>
+.vip-map-frame {
+    position: relative;
+    width: min(100%, 1176px);
+    height: 58vh;
+    min-height: 420px;
+    overflow: auto;
+    background: #020202;
+    border: 1px solid #333;
+    cursor: crosshair;
+}
+
+.vip-map-canvas {
+    position: relative;
+}
+
+.vip-map-image {
+    position: absolute;
+    left: 0;
+    top: 0;
+    user-select: none;
+    pointer-events: none;
+}
+
+.vip-marker-layer {
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.vip-map-marker {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: 2px solid #000;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+}
+
+.vip-map-marker.player {
+    background: #4aa3ff;
+    box-shadow: 0 0 12px #4aa3ff;
+}
+
+.vip-map-marker.vehicle {
+    background: #71d36b;
+    box-shadow: 0 0 12px #71d36b;
+}
+
+.vip-map-marker.base {
+    background: #d6a444;
+    box-shadow: 0 0 12px #d6a444;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>VIP Tools</h1>
+
+<div id="actionOutput" class="msg" style="display:none;"></div>
+
+<div class="grid">
+
+<div class="box">
+<h2>Linked Character</h2>
+<div class="warning">
+These tools only act on the in-game character linked to this web account by an admin. The character name must match the game database exactly.
+</div>
+<div class="coord-box" id="vipCharacterSummary">
+    Loading linked character...
+</div>
+</div>
+
+<div class="box">
+<h2>Self Overrepair</h2>
+<div class="warning">
+The character must be logged off. Items must be unequipped and in the character inventory.<br><br>
+If some items fail to overrepair, empty extra inventory, move failed items higher in the bag, equip items that worked, retry, and verify the SQL output.
+</div>
+
+<form id="vipOverrepairForm">
+    <label>Durability Value</label>
+    <input type="text" name="durability" value="{{ default_overrepair_durability }}" required>
+    <button type="submit">Overrepair My Inventory</button>
+</form>
+</div>
+
+</div>
+
+<div class="grid">
+
+<div class="box">
+<h2>Give MK6 Scout Thopter</h2>
+<div class="warning">
+Grants RedBlink template <b>{{ scout_thopter_template }}</b> to your linked character only.
+</div>
+<form id="vipScoutThopterForm">
+    <button type="submit">Give MK6 Scout Thopter</button>
+</form>
+</div>
+
+<div class="box">
+<h2>Give Mk6 Medium Ornithopter Kit</h2>
+<div class="warning">
+Grants the full Mk6 Medium Ornithopter kit to your linked character only.<br><br>
+Make sure you have at least 21 free inventory slots; 25+ is recommended to reduce overflow or partial grants.
+</div>
+<form id="vipMediumThopterForm">
+    <button type="submit">Give Mk6 Medium Ornithopter Kit</button>
+</form>
+
+<h3>Bundle Contents</h3>
+<ul>
+{% for item_id, qty in medium_bundle %}
+<li>{{ item_id }} x{{ qty }}</li>
+{% endfor %}
+</ul>
+</div>
+
+</div>
+
+<div class="box">
+<h2>Self Offline Teleport</h2>
+<div class="warning">
+Use only while your character is offline. Click the map to fill X/Y, set a safe Z, then teleport. The server uses your linked character automatically; no player IDs are accepted from the browser.
+</div>
+
+<label>Map</label>
+<select id="vipMapSelect" onchange="switchVipMap()">
+    <option value="HaggaBasin">Arrakis - Hagga Basin</option>
+    <option value="DeepDesert">The Deep Desert</option>
+</select>
+
+<label>Zoom</label>
+<input id="vipMapZoom" type="range" min="5" max="100" value="14" oninput="setVipMapZoomFromSlider()">
+<div id="vipZoomReadout">14%</div>
+
+<div class="coord-box" id="vipMapSummary">
+    Loading map...
+</div>
+
+<form id="vipTeleportForm">
+    <input type="hidden" name="map_key" id="vipTeleportMapKey" value="{{ default_map_key }}">
+
+    <label>Partition ID</label>
+    <input type="text" name="partition_id" id="vipTeleportPartitionId" value="1" required>
+
+    <label>X</label>
+    <input type="text" name="x" id="vipTeleportX" required>
+
+    <label>Y</label>
+    <input type="text" name="y" id="vipTeleportY" required>
+
+    <label>Z</label>
+    <input type="text" name="z" id="vipTeleportZ" value="1000" required>
+
+    <button type="submit">Teleport My Offline Character</button>
+</form>
+
+<div class="vip-map-frame" id="vipMapFrame">
+    <div class="vip-map-canvas" id="vipMapCanvas">
+        <img class="vip-map-image" id="vipMapImage" src="" alt="">
+        <div class="vip-marker-layer" id="vipMarkerLayer"></div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/dune-admin.js"></script>
+<script>
+const vipMapConfigs = {{ map_configs|tojson }};
+let vipSelectedMapKey = "{{ default_map_key }}";
+let vipMapConfig = vipMapConfigs[vipSelectedMapKey];
+let vipMapZoom = 0.14;
+
+function vipPartitionForMap(mapKey) {
+    if (mapKey === "DeepDesert") return "8";
+    return "1";
+}
+
+function vipPixelToWorld(px, py) {
+    const x = vipMapConfig.min_x + (px / vipMapConfig.width) * (vipMapConfig.max_x - vipMapConfig.min_x);
+    let y = vipMapConfig.min_y + (py / vipMapConfig.height) * (vipMapConfig.max_y - vipMapConfig.min_y);
+    if (vipMapConfig.flip_y) {
+        const unflippedPy = vipMapConfig.height - py;
+        y = vipMapConfig.min_y + (unflippedPy / vipMapConfig.height) * (vipMapConfig.max_y - vipMapConfig.min_y);
+    }
+    return { x, y };
+}
+
+function renderVipMapShell() {
+    const canvas = document.getElementById("vipMapCanvas");
+    const image = document.getElementById("vipMapImage");
+    const layer = document.getElementById("vipMarkerLayer");
+
+    image.src = `/static/${vipMapConfig.image}`;
+    image.alt = vipMapConfig.label;
+
+    const width = vipMapConfig.width * vipMapZoom;
+    const height = vipMapConfig.height * vipMapZoom;
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+    image.style.width = `${width}px`;
+    image.style.height = `${height}px`;
+    layer.style.width = `${width}px`;
+    layer.style.height = `${height}px`;
+}
+
+function setVipMapZoomFromSlider() {
+    const slider = document.getElementById("vipMapZoom");
+    const readout = document.getElementById("vipZoomReadout");
+    vipMapZoom = Math.max(0.05, Math.min(1.00, Number(slider.value || 14) / 100));
+    if (readout) readout.textContent = `${Math.round(vipMapZoom * 100)}%`;
+    refreshVipMapMarkers();
+}
+
+function switchVipMap() {
+    const select = document.getElementById("vipMapSelect");
+    vipSelectedMapKey = select.value || "HaggaBasin";
+    vipMapConfig = vipMapConfigs[vipSelectedMapKey] || vipMapConfigs.HaggaBasin;
+    document.getElementById("vipTeleportMapKey").value = vipSelectedMapKey;
+    document.getElementById("vipTeleportPartitionId").value = vipPartitionForMap(vipSelectedMapKey);
+    refreshVipMapMarkers();
+}
+
+function fillVipTeleportTarget(event) {
+    const frame = document.getElementById("vipMapFrame");
+    const rect = frame.getBoundingClientRect();
+    const px = (frame.scrollLeft + event.clientX - rect.left) / vipMapZoom;
+    const py = (frame.scrollTop + event.clientY - rect.top) / vipMapZoom;
+    if (px < 0 || py < 0 || px > vipMapConfig.width || py > vipMapConfig.height) return;
+
+    const world = vipPixelToWorld(px, py);
+    document.getElementById("vipTeleportX").value = world.x.toFixed(2);
+    document.getElementById("vipTeleportY").value = world.y.toFixed(2);
+    document.getElementById("vipTeleportMapKey").value = vipSelectedMapKey;
+    document.getElementById("vipTeleportPartitionId").value = vipPartitionForMap(vipSelectedMapKey);
+}
+
+async function loadVipCharacter() {
+    const panel = document.getElementById("vipCharacterSummary");
+    const response = await fetch("/api/vip-character");
+    const data = await response.json();
+    if (!data.ok) {
+        panel.textContent = data.error || "Unable to load linked character.";
+        return;
+    }
+    const c = data.character || {};
+    panel.innerHTML = `
+        Character: ${escapeHtml(c.character_name || "")}<br>
+        Status: ${escapeHtml(c.online_status || "")} / ${escapeHtml(c.life_state || "")}<br>
+        Actor: ${escapeHtml(c.character_actor_id || "")}<br>
+        Inventory: ${escapeHtml(c.inventory_id || "")}
+    `;
+}
+
+async function refreshVipMapMarkers() {
+    renderVipMapShell();
+    const summary = document.getElementById("vipMapSummary");
+    const layer = document.getElementById("vipMarkerLayer");
+    layer.innerHTML = "";
+
+    const response = await fetch(`/api/map-markers?map=${encodeURIComponent(vipSelectedMapKey)}`);
+    const data = await response.json();
+    if (!data.ok) {
+        summary.textContent = data.error || "Unable to load map markers.";
+        return;
+    }
+
+    const visible = (data.markers || []).filter(m => m.in_bounds);
+    summary.textContent = `${vipMapConfig.label}: ${visible.length} visible marker(s)`;
+
+    visible.forEach(marker => {
+        const node = document.createElement("div");
+        node.className = `vip-map-marker ${marker.type}`;
+        node.style.left = `${marker.px * vipMapZoom}px`;
+        node.style.top = `${marker.py * vipMapZoom}px`;
+        node.title = marker.name || marker.type;
+        layer.appendChild(node);
+    });
+}
+
+document.getElementById("vipMapFrame").addEventListener("click", fillVipTeleportTarget);
+
+document.getElementById("vipOverrepairForm").addEventListener("submit", async function(event) {
+    event.preventDefault();
+    if (!confirm("Overrepair your linked character inventory? Character must be offline and items unequipped.")) return;
+    await postForm("/api/vip-overrepair", this);
+});
+
+document.getElementById("vipTeleportForm").addEventListener("submit", async function(event) {
+    event.preventDefault();
+    if (!confirm("Teleport your linked character? This is intended for offline characters only.")) return;
+    await postForm("/api/vip-teleport-offline", this);
+});
+
+document.getElementById("vipScoutThopterForm").addEventListener("submit", async function(event) {
+    event.preventDefault();
+    if (!confirm("Grant a MK6 Scout Thopter to your linked character?")) return;
+    await postForm("/api/vip-give-scout-thopter", this);
+});
+
+document.getElementById("vipMediumThopterForm").addEventListener("submit", async function(event) {
+    event.preventDefault();
+    if (!confirm("Grant the Mk6 Medium Ornithopter kit to your linked character? Confirm you have 25+ free inventory slots.")) return;
+    await postForm("/api/vip-give-medium-thopter", this);
+});
+
+loadVipCharacter();
+switchVipMap();
+</script>
+{% endblock %}

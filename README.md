@@ -1,11 +1,11 @@
-<h1 align="center">n00bGame's Dune Awakening Web-Admin</h1>
+<h1 align="center">Easy Dune Admin</h1>
 
 <p align="center">
   Companion administration platform for RedBlink's Dune Awakening self-hosted Docker stack.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.6.5--rc1-orange">
+  <img src="https://img.shields.io/badge/version-0.6.6--rc2-orange">
   <img src="https://img.shields.io/badge/license-GPLv3-green">
   <img src="https://img.shields.io/badge/RedBlink-v1.3.2-blue">
   <img src="https://img.shields.io/badge/status-release%20candidate-orange">
@@ -14,14 +14,14 @@
 </p>
 
 <p align="center">
-  <img src="images/logo.png" alt="Dune Awakening Web-Admin logo" width="720">
+  <img src="images/logo.png" alt="Easy Dune Admin logo" width="720">
 </p>
 
 ---
 
 ## Status
 
-Current panel version: `0.6.5-rc1`
+Current panel version: `0.6.6-rc2`
 
 Target RedBlink Stack: `v1.3.2`
 
@@ -92,11 +92,36 @@ This release candidate is intended for private/LAN/VPN-hosted self-hosted server
 - Mk6 Medium Ornithopter grant
 - Medium thopter kit includes 250 rockets
 
+### Market Tools
+
+- Admin-only preset market seeding
+- Seeds NPC exchange listings for equippable items, schematics, and resources
+- Uses a `Revy`-style bot owner and `is_npc_order = TRUE`
+- Seed Exchange ID override supports servers whose visible player market is not the DB `Global` exchange id
+- Default preset clears only the market bot's existing NPC listings before reseeding
+- Per-run price multiplier input defaults to 5x so Solari keeps value on private servers
+- Items or schematics with names/IDs containing `wing`, `track`, or `locomotion` seed 8 listings by default
+- Refined resources use an additional 2.5x category price multiplier
+- Raw resources use an additional 5x category price multiplier, with overrides for Spice Sand/Residue, Titanium Ore, Stravidium Mass, Agave Seeds, and Basalt Stone
+- Clear NPC Market Listings button removes the bot's NPC listings without relisting
+- Buy Eligible Player Listings lets Revy buy player listings priced at or below 60% of the current preset price
+- Buyback threshold, max buys per sweep, and sweep interval are editable in the Admin UI
+- Start/Stop Buyback Sweep controls run Revy buyback immediately once, then on the configured interval while Easy Dune Admin is running
+- Market category mapping and item-data research adapted from IceHunter / Ryan Wilson's MIT-licensed dune-admin project
+
 ### Repair Tools
 
 - Admin-only gear overrepair
 - Admin-only vehicle module repair
 - Sane default repair values with editable durability fields
+
+### VIP Tools
+
+- VIP role with viewer-safe access plus self-service tools
+- Admin-managed exact character-name link for each VIP web account
+- Self-only overrepair for the linked character inventory
+- Self-only offline teleport using the linked character account/FLS ID
+- Self-only Mk6 Scout and Mk6 Medium Ornithopter grants
 
 ### Server Management
 
@@ -159,8 +184,8 @@ curl
 ## Installation
 
 ```bash
-git clone https://github.com/n00bgames/ng_da_webadmin.git
-cd ng_da_webadmin
+git clone https://github.com/n00bgames/Easy-Dune-Admin.git
+cd Easy-Dune-Admin
 
 python3 -m venv venv
 source venv/bin/activate
@@ -241,7 +266,7 @@ export REDBLINK_INSTALL_DIR=/path/to/dune-awakening-selfhost-docker
 Before replacing a running copy, back it up:
 
 ```bash
-cp -a ~/dune-admin-web ~/dune-admin-web.backup-before-0.6.5-rc1
+cp -a ~/dune-admin-web ~/dune-admin-web.backup-before-0.6.6-rc2
 ```
 
 Preserve local runtime data:
@@ -318,7 +343,6 @@ Viewer accounts are intentionally privacy-limited. They can see viewer-safe stat
 
 - Map marker styling is functional but still being refined.
 - Autoscaler controls are planned.
-- VIP role is planned for a later release.
 - Vehicle repair writes directly to `dune.vehicle_modules` stats JSON.
 - Vehicle teleport writes to `dune.actors`, but loaded vehicle actors do not reload their transform until the affected map/server instance restarts.
 - Gear overrepair requires items to be unequipped and in inventory.
@@ -328,11 +352,8 @@ Viewer accounts are intentionally privacy-limited. They can see viewer-safe stat
 
 ## Planned
 
-- VIP role
-- VIP self-only teleport
-- VIP self-only item grants
-- VIP self-only thopter grants
-- Vehicle ownership discovery for VIP self-repair
+- VIP self-only generic item grants
+- Vehicle ownership discovery for VIP self-repair/teleport
 - Live map side panel / scroll-safe layout
 - Autoscaler controls
 - Dynamic map discovery from RedBlink map runtime config
@@ -341,24 +362,9 @@ Viewer accounts are intentionally privacy-limited. They can see viewer-safe stat
 
 ## Release Notes
 
-### 0.6.5-rc1
+See `CHANGELOG.md` for full release history.
 
-- Updated RedBlink stack target to `v1.3.2`.
-- Added RedBlink map runtime controls.
-- Added Deep Desert dual PvP/PvE controls.
-- Hardened browser shell fitting.
-- Included runtime map and banner assets.
-- Included GitHub README images under `images/`.
-- Added `.gitattributes` line-ending guard.
-- Added `setup.sh`.
-- Improved `start.sh`.
-- Added grouped restart services.
-- Added DB health/status/list/backup controls.
-- Added RedBlink v1.3.2 map controls.
-- Added admin-only vehicle teleport for Ornithopter, Sandbike, Buggy, TreadWheel, and SandCrawler actor families.
-- Documented that vehicle teleport requires an affected map/server restart before loaded vehicle actors move in-game.
-- Added `restart.sh` and `shutdown.sh` runtime helpers for screen/headless daemon control.
-- Updated release packaging and GPLv3 metadata.
+Current highlight for `0.6.6-rc2`: Easy Dune Admin branding, VIP self-service tools, admin vehicle teleport refinements, and IceHunter-attributed market seeding/cleanup tools.
 
 ---
 
@@ -366,6 +372,7 @@ Viewer accounts are intentionally privacy-limited. They can see viewer-safe stat
 
 - RedBlink and contributors
 - Funcom
+- IceHunter / Ryan Wilson's MIT-licensed `dune-admin` project for market tooling research, category mapping, and bundled market item data.
 - Community researchers and testers
 
 ---
@@ -373,3 +380,5 @@ Viewer accounts are intentionally privacy-limited. They can see viewer-safe stat
 ## License
 
 GPLv3. See `LICENSE`.
+
+Third-party reference material remains under its original license. See `THIRD_PARTY_NOTICES.md` for included MIT license text and attribution.

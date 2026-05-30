@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """
-n00bGame's Dune Awakening Web-Admin
-Panel version: 0.6.5-rc1
+Easy Dune Admin
+Panel version: 0.6.6-rc2
 RedBlink stack compatibility target: v1.3.2
 
-0.6.5-rc1 RedBlink v1.3.2 support:
+0.6.6-rc2 RedBlink v1.3.2 support:
 - Updates RedBlink stack target to v1.3.2.
 - Adds Server Management controls for dune maps runtime modes.
 - Adds controls for dynamic vs always-on map runtime behavior.
 - Adds map reconcile command.
 - Adds Deep Desert dual PvP/PvE status, enable, disable, bootstrap, and repair controls.
 - Hardens browser shell fitting with FitAddon fallback/manual resize.
+- Adds VIP self-service tools for linked characters.
+- Adds admin market seeding tools with IceHunter attribution.
 
 SECURITY NOTES
 --------------
@@ -35,7 +37,7 @@ import threading
 import time
 import psutil
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import Flask, redirect, render_template, request, session, jsonify
@@ -45,12 +47,14 @@ from flask import Flask, redirect, render_template, request, session, jsonify
 from flask_socketio import SocketIO, emit, disconnect
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import market_seed
+
 
 # =========================================================
 # CONFIGURABLE VALUES
 # =========================================================
 
-PANEL_VERSION = "0.6.5-rc1"
+PANEL_VERSION = "0.6.6-rc2"
 REDBLINK_STACK_VERSION = "v1.3.2"
 
 # RedBlink stack path. Change this if your install lives elsewhere.
@@ -69,6 +73,76 @@ ITEMS_FILE = DUNE_ROOT / "runtime/data/admin-items.json"
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = BASE_DIR / "users.db"
+
+# IceHunter / Ryan Wilson's MIT-licensed dune-admin project includes a richer
+# exchange catalog than RedBlink's admin item list. We use this local copy for
+# market seeding because it includes tradeable flags, stack sizes, category
+# paths, rarity, tiers, and vendor prices. See README credits/third-party notes.
+MARKET_ITEM_DATA_FILE = BASE_DIR / "data" / "icehunter-item-data.json"
+
+# Market seed pricing is intentionally inflated from IceHunter's baseline so
+# Solari keeps some value on small private servers. Set to 1 to use the
+# original-style pricing scale, or tune higher/lower for your economy.
+MARKET_PRICE_MULTIPLIER = int(os.environ.get("MARKET_PRICE_MULTIPLIER", "5"))
+
+# Optional explicit Dune Exchange id for market seeding. Leave blank to use the
+# game's Global exchange function. If seeded rows succeed but do not appear in
+# the in-game exchange, set this to the exchange_id observed from a real player
+# listing on your server.
+MARKET_SEED_EXCHANGE_ID = os.environ.get("MARKET_SEED_EXCHANGE_ID", "").strip()
+
+# Bot actor class used for NPC exchange listings. IceHunter's marketbot uses
+# "Revy"; keeping the same value makes attribution and future compatibility
+# straightforward. Change only if you know you need a separate market owner.
+MARKET_BOT_CLASS = os.environ.get("MARKET_BOT_CLASS", "Revy")
+
+# Preset stock counts. Equippable items and schematics are individual listings
+# because most stack to 1. Resource-like stackables get one large listing.
+MARKET_EQUIPPABLE_LISTINGS = int(os.environ.get("MARKET_EQUIPPABLE_LISTINGS", "2"))
+MARKET_SCHEMATIC_LISTINGS = int(os.environ.get("MARKET_SCHEMATIC_LISTINGS", "2"))
+MARKET_RESOURCE_STACK_SIZE = int(os.environ.get("MARKET_RESOURCE_STACK_SIZE", "1000"))
+
+# Extra seed coverage for vehicle mobility parts that tend to be pain points.
+# Matching checks both the template id and display name, case-insensitively.
+# Override with, for example:
+#   export MARKET_SPECIAL_NAME_TERMS='wing,track,locomotion,tread'
+#   export MARKET_SPECIAL_NAME_LISTINGS=8
+MARKET_SPECIAL_NAME_TERMS = [
+    term.strip().casefold()
+    for term in os.environ.get("MARKET_SPECIAL_NAME_TERMS", "wing,track,locomotion").split(",")
+    if term.strip()
+]
+MARKET_SPECIAL_NAME_LISTINGS = int(os.environ.get("MARKET_SPECIAL_NAME_LISTINGS", "8"))
+
+# Refined resources are more progression-critical than common raw mats. This
+# multiplier is applied before the per-run market multiplier, so the default
+# total for refined resources is baseline * 2.5 * 5.
+MARKET_REFINED_RESOURCE_PRICE_MULTIPLIER = float(
+    os.environ.get("MARKET_REFINED_RESOURCE_PRICE_MULTIPLIER", "2.5")
+)
+
+# Raw resource market tuning. The general raw-resource multiplier is separate
+# from the browser's per-run market multiplier. Specific template overrides are
+# keyed by the exact item template id from IceHunter's item-data catalog so they
+# do not accidentally match unrelated item names.
+MARKET_RAW_RESOURCE_PRICE_MULTIPLIER = float(
+    os.environ.get("MARKET_RAW_RESOURCE_PRICE_MULTIPLIER", "5")
+)
+MARKET_RAW_RESOURCE_PRICE_OVERRIDES = {
+    "SpiceSand": 10.0,
+    "SpiceResidue": 10.0,
+    "Basalt": 0.2,
+    "T6ResourceA": 8.0,        # Titanium Ore
+    "T6ResourceB": 8.0,        # Stravidium Mass
+    "SaguaroResourceRaw": 10.0, # Agave Seeds
+}
+
+# Revy will buy player listings at or below this percentage of the price the
+# current preset would list that same item for. Keep below 100 so players can
+# profit by selling to each other, while still letting the bot provide liquidity.
+MARKET_BUY_THRESHOLD_PERCENT = int(os.environ.get("MARKET_BUY_THRESHOLD_PERCENT", "60"))
+MARKET_BUY_MAX_PER_CLICK = int(os.environ.get("MARKET_BUY_MAX_PER_CLICK", "500"))
+MARKET_BUYBACK_INTERVAL_MINUTES = int(os.environ.get("MARKET_BUYBACK_INTERVAL_MINUTES", "30"))
 
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
@@ -268,6 +342,26 @@ socketio = SocketIO(app, async_mode="threading", cors_allowed_origins="*")
 # Active host shell sessions keyed by SocketIO session id.
 SHELL_SESSIONS = {}
 
+# In-process buyback sweep state. This deliberately lives in the webadmin
+# daemon rather than cron so admins can start/stop it from the browser. It is
+# reset when the webadmin process restarts.
+MARKET_BUYBACK_STATE_LOCK = threading.Lock()
+MARKET_BUYBACK_RUN_LOCK = threading.Lock()
+MARKET_BUYBACK_STOP_EVENT = threading.Event()
+MARKET_BUYBACK_THREAD = None
+MARKET_BUYBACK_STATE = {
+    "enabled": False,
+    "price_multiplier": MARKET_PRICE_MULTIPLIER,
+    "threshold_percent": MARKET_BUY_THRESHOLD_PERCENT,
+    "max_buys": MARKET_BUY_MAX_PER_CLICK,
+    "interval_minutes": MARKET_BUYBACK_INTERVAL_MINUTES,
+    "last_run": "",
+    "last_output": "",
+    "last_error": "",
+    "next_run": "",
+    "runs": 0,
+}
+
 
 @app.context_processor
 def inject_template_globals():
@@ -287,6 +381,13 @@ def inject_template_globals():
         "redblink_install_dir": str(REDBLINK_INSTALL_DIR),
         "map_configs": MAP_CONFIGS,
         "default_map_key": DEFAULT_MAP_KEY,
+        "market_bot_class": MARKET_BOT_CLASS,
+        "market_price_multiplier": MARKET_PRICE_MULTIPLIER,
+        "market_seed_exchange_id": MARKET_SEED_EXCHANGE_ID,
+        "market_resource_stack_size": MARKET_RESOURCE_STACK_SIZE,
+        "market_buy_threshold_percent": MARKET_BUY_THRESHOLD_PERCENT,
+        "market_buy_max_per_click": MARKET_BUY_MAX_PER_CLICK,
+        "market_buyback_interval_minutes": MARKET_BUYBACK_INTERVAL_MINUTES,
     }
 
 
@@ -308,10 +409,14 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password TEXT NOT NULL,
-            role TEXT NOT NULL
+            role TEXT NOT NULL,
+            character_name TEXT DEFAULT ''
         )
         """
     )
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()]
+    if "character_name" not in columns:
+        conn.execute("ALTER TABLE users ADD COLUMN character_name TEXT DEFAULT ''")
     conn.commit()
     conn.close()
 
@@ -327,7 +432,7 @@ def list_users():
     conn = db()
     rows = conn.execute(
         """
-        SELECT id, username, role
+        SELECT id, username, role, COALESCE(character_name, '') AS character_name
         FROM users
         ORDER BY username
         """
@@ -357,6 +462,14 @@ def is_admin():
 
 def is_operator_or_admin():
     return current_role() in ("operator", "admin")
+
+
+def is_vip():
+    return current_role() == "vip"
+
+
+def can_use_vip_tools():
+    return current_role() in ("vip", "admin")
 
 
 def require_login():
@@ -422,6 +535,39 @@ def run_psql(sql, timeout=60):
     return run_command(cmd, timeout=timeout)
 
 
+def run_psql_script(sql, timeout=180):
+    """Run a multi-statement SQL script through psql stdin."""
+    cmd = [
+        "docker",
+        "exec",
+        "-i",
+        POSTGRES_CONTAINER,
+        "psql",
+        "-U",
+        "dune",
+        "-d",
+        "dune",
+        "-v",
+        "ON_ERROR_STOP=1",
+    ]
+    proc = subprocess.run(
+        cmd,
+        cwd=str(DUNE_ROOT),
+        input=sql,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+
+    return (
+        "$ " + " ".join(cmd)
+        + "\n\nSTDOUT:\n" + proc.stdout
+        + "\nSTDERR:\n" + proc.stderr
+        + f"\nExit code: {proc.returncode}"
+    )
+
+
 def load_items():
     if not ITEMS_FILE.exists():
         return []
@@ -450,6 +596,340 @@ def search_items(query, limit=100):
             results.append(item)
 
     return results[:limit]
+
+
+def market_price_multiplier_from_value(value):
+    """
+    Validate an admin-entered per-run market price multiplier.
+
+    The environment default stays useful for unattended installs, while this
+    helper lets admins tune one seed run from the browser without editing files.
+    """
+    raw_value = str(value if value not in (None, "") else MARKET_PRICE_MULTIPLIER).strip()
+    try:
+        multiplier = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("price multiplier must be a whole number") from exc
+
+    if multiplier < 1:
+        raise ValueError("price multiplier must be at least 1")
+    if multiplier > 10000:
+        raise ValueError("price multiplier must be 10000 or lower")
+    return multiplier
+
+
+def market_buy_threshold_from_value(value):
+    raw_value = str(value if value not in (None, "") else MARKET_BUY_THRESHOLD_PERCENT).strip()
+    try:
+        threshold = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("buy threshold must be a whole percent") from exc
+
+    if threshold < 1:
+        raise ValueError("buy threshold must be at least 1%")
+    if threshold > 100:
+        raise ValueError("buy threshold must be 100% or lower")
+    return threshold
+
+
+def market_buy_max_from_value(value):
+    raw_value = str(value if value not in (None, "") else MARKET_BUY_MAX_PER_CLICK).strip()
+    try:
+        max_buys = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("max buys must be a whole number") from exc
+
+    if max_buys < 1:
+        raise ValueError("max buys must be at least 1")
+    if max_buys > 5000:
+        raise ValueError("max buys must be 5000 or lower")
+    return max_buys
+
+
+def market_buyback_interval_from_value(value):
+    raw_value = str(value if value not in (None, "") else MARKET_BUYBACK_INTERVAL_MINUTES).strip()
+    try:
+        interval = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("buyback interval must be whole minutes") from exc
+
+    if interval < 1:
+        raise ValueError("buyback interval must be at least 1 minute")
+    if interval > 1440:
+        raise ValueError("buyback interval must be 1440 minutes or lower")
+    return interval
+
+
+def market_exchange_id_from_value(value):
+    raw_value = str(value if value is not None else MARKET_SEED_EXCHANGE_ID).strip()
+    if not raw_value:
+        return None
+    try:
+        exchange_id = int(raw_value)
+    except ValueError as exc:
+        raise ValueError("exchange id must be blank or a whole number") from exc
+
+    if exchange_id < 1:
+        raise ValueError("exchange id must be at least 1")
+    return exchange_id
+
+
+def build_market_seed_plan(price_multiplier=None):
+    multiplier = market_price_multiplier_from_value(price_multiplier)
+    return market_seed.build_seed_plan(
+        MARKET_ITEM_DATA_FILE,
+        multiplier,
+        MARKET_EQUIPPABLE_LISTINGS,
+        MARKET_SCHEMATIC_LISTINGS,
+        MARKET_RESOURCE_STACK_SIZE,
+        MARKET_SPECIAL_NAME_TERMS,
+        MARKET_SPECIAL_NAME_LISTINGS,
+        MARKET_REFINED_RESOURCE_PRICE_MULTIPLIER,
+        MARKET_RAW_RESOURCE_PRICE_MULTIPLIER,
+        MARKET_RAW_RESOURCE_PRICE_OVERRIDES,
+    )
+
+
+def market_seed_summary(price_multiplier=None):
+    multiplier = market_price_multiplier_from_value(price_multiplier)
+    plan = build_market_seed_plan(multiplier)
+    return market_seed.summary(plan, multiplier)
+
+
+def seed_market_preset(clear_existing=True, price_multiplier=None, exchange_id=None):
+    multiplier = market_price_multiplier_from_value(price_multiplier)
+    exchange_id_override = market_exchange_id_from_value(exchange_id)
+    plan = build_market_seed_plan(multiplier)
+    if not plan:
+        raise ValueError(f"market item data not found or empty: {MARKET_ITEM_DATA_FILE}")
+    sql = market_seed.build_seed_sql(
+        plan,
+        MARKET_BOT_CLASS,
+        multiplier,
+        clear_existing=clear_existing,
+        exchange_id_override=exchange_id_override,
+    )
+    return run_psql_script(sql, timeout=300)
+
+
+def buy_player_market_listings(price_multiplier=None, threshold_percent=None, max_buys=None):
+    multiplier = market_price_multiplier_from_value(price_multiplier)
+    threshold = market_buy_threshold_from_value(threshold_percent)
+    buy_limit = market_buy_max_from_value(max_buys)
+    plan = build_market_seed_plan(multiplier)
+    if not plan:
+        raise ValueError(f"market item data not found or empty: {MARKET_ITEM_DATA_FILE}")
+    sql = market_seed.build_buy_player_listings_sql(
+        plan,
+        MARKET_BOT_CLASS,
+        threshold_percent=threshold,
+        max_buys=buy_limit,
+    )
+    return run_psql_script(sql, timeout=300)
+
+
+def run_buyback_sweep(price_multiplier=None, threshold_percent=None, max_buys=None):
+    """
+    Run one buyback sweep with overlap protection.
+
+    Manual buyback and timed buyback share this helper so two long database
+    sweeps cannot run at the same time from different buttons/threads.
+    """
+    acquired = MARKET_BUYBACK_RUN_LOCK.acquire(blocking=False)
+    if not acquired:
+        raise RuntimeError("buyback sweep already running")
+    try:
+        return buy_player_market_listings(
+            price_multiplier=price_multiplier,
+            threshold_percent=threshold_percent,
+            max_buys=max_buys,
+        )
+    finally:
+        MARKET_BUYBACK_RUN_LOCK.release()
+
+
+def market_buyback_status():
+    with MARKET_BUYBACK_STATE_LOCK:
+        return dict(MARKET_BUYBACK_STATE)
+
+
+def set_market_buyback_state(**updates):
+    with MARKET_BUYBACK_STATE_LOCK:
+        MARKET_BUYBACK_STATE.update(updates)
+        return dict(MARKET_BUYBACK_STATE)
+
+
+def market_buyback_loop():
+    """
+    Background timed buyback worker.
+
+    Start runs one immediate sweep, then this loop handles later interval runs.
+    """
+    while True:
+        status = market_buyback_status()
+        interval_seconds = max(1, int(status["interval_minutes"])) * 60
+        if MARKET_BUYBACK_STOP_EVENT.wait(interval_seconds):
+            break
+
+        status = market_buyback_status()
+        if not status.get("enabled"):
+            continue
+
+        multiplier = status.get("price_multiplier") or MARKET_PRICE_MULTIPLIER
+        threshold = status.get("threshold_percent") or MARKET_BUY_THRESHOLD_PERCENT
+        max_buys = status.get("max_buys") or MARKET_BUY_MAX_PER_CLICK
+        started = datetime.now()
+        try:
+            output = run_buyback_sweep(
+                price_multiplier=multiplier,
+                threshold_percent=threshold,
+                max_buys=max_buys,
+            )
+            next_run = datetime.now() + timedelta(minutes=int(status["interval_minutes"]))
+            set_market_buyback_state(
+                last_run=started.strftime("%Y-%m-%d %H:%M:%S"),
+                last_output=output[-4000:],
+                last_error="",
+                next_run=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                runs=int(status.get("runs") or 0) + 1,
+            )
+            log_action(
+                "system",
+                f"automated {MARKET_BOT_CLASS} buyback sweep at {threshold}% threshold using {multiplier}x prices, max {max_buys}",
+            )
+        except Exception as exc:
+            next_run = datetime.now() + timedelta(minutes=int(status["interval_minutes"]))
+            set_market_buyback_state(
+                last_run=started.strftime("%Y-%m-%d %H:%M:%S"),
+                last_error=str(exc),
+                next_run=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            log_action("system", f"automated buyback sweep failed: {exc}")
+
+
+def start_market_buyback_sweep(
+    price_multiplier=None,
+    threshold_percent=None,
+    max_buys=None,
+    interval_minutes=None,
+    run_now=True,
+):
+    global MARKET_BUYBACK_THREAD, MARKET_BUYBACK_STOP_EVENT
+
+    multiplier = market_price_multiplier_from_value(price_multiplier)
+    threshold = market_buy_threshold_from_value(threshold_percent)
+    buy_limit = market_buy_max_from_value(max_buys)
+    interval = market_buyback_interval_from_value(interval_minutes)
+    next_run = datetime.now() + timedelta(minutes=interval)
+
+    with MARKET_BUYBACK_STATE_LOCK:
+        MARKET_BUYBACK_STATE.update(
+            {
+                "enabled": True,
+                "price_multiplier": multiplier,
+                "threshold_percent": threshold,
+                "max_buys": buy_limit,
+                "interval_minutes": interval,
+                "next_run": next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                "last_error": "",
+            }
+        )
+
+    if MARKET_BUYBACK_THREAD is None or not MARKET_BUYBACK_THREAD.is_alive():
+        MARKET_BUYBACK_STOP_EVENT = threading.Event()
+        MARKET_BUYBACK_THREAD = threading.Thread(target=market_buyback_loop, daemon=True)
+        MARKET_BUYBACK_THREAD.start()
+
+    if run_now:
+        started = datetime.now()
+        try:
+            output = run_buyback_sweep(
+                price_multiplier=multiplier,
+                threshold_percent=threshold,
+                max_buys=buy_limit,
+            )
+            next_run = datetime.now() + timedelta(minutes=interval)
+            set_market_buyback_state(
+                last_run=started.strftime("%Y-%m-%d %H:%M:%S"),
+                last_output=output[-4000:],
+                last_error="",
+                next_run=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                runs=int(market_buyback_status().get("runs") or 0) + 1,
+            )
+            log_action(
+                "system",
+                f"started automated {MARKET_BOT_CLASS} buyback with immediate sweep at {threshold}% threshold using {multiplier}x prices, max {buy_limit}",
+            )
+        except Exception as exc:
+            next_run = datetime.now() + timedelta(minutes=interval)
+            set_market_buyback_state(
+                last_run=started.strftime("%Y-%m-%d %H:%M:%S"),
+                last_error=str(exc),
+                next_run=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+            raise
+
+    return market_buyback_status()
+
+
+def stop_market_buyback_sweep():
+    MARKET_BUYBACK_STOP_EVENT.set()
+    return set_market_buyback_state(enabled=False, next_run="")
+
+
+def build_market_clear_npc_sql():
+    """
+    Remove only this market bot's NPC exchange listings and their backing items.
+
+    Player listings are protected by both owner_id and is_npc_order = TRUE.
+    This is useful while tuning presets because it clears the exchange without
+    immediately creating replacement listings.
+    """
+    bot_class = market_seed.sql_literal(MARKET_BOT_CLASS)
+    return f"""
+DO $$
+DECLARE
+    v_owner_id BIGINT;
+    v_item_ids BIGINT[];
+BEGIN
+    SELECT id INTO v_owner_id
+    FROM dune.actors
+    WHERE class = {bot_class}
+    LIMIT 1;
+
+    IF v_owner_id IS NULL THEN
+        RAISE NOTICE 'No market bot actor found for class {MARKET_BOT_CLASS}. Nothing to clear.';
+        RETURN;
+    END IF;
+
+    SELECT ARRAY_AGG(item_id) INTO v_item_ids
+    FROM dune.dune_exchange_orders
+    WHERE owner_id = v_owner_id
+      AND is_npc_order = TRUE
+      AND item_id IS NOT NULL;
+
+    DELETE FROM dune.dune_exchange_sell_orders
+    WHERE order_id IN (
+        SELECT id
+        FROM dune.dune_exchange_orders
+        WHERE owner_id = v_owner_id
+          AND is_npc_order = TRUE
+    );
+
+    DELETE FROM dune.dune_exchange_orders
+    WHERE owner_id = v_owner_id
+      AND is_npc_order = TRUE;
+
+    IF v_item_ids IS NOT NULL THEN
+        DELETE FROM dune.items
+        WHERE id = ANY(v_item_ids);
+    END IF;
+END $$;
+"""
+
+
+def clear_market_npc_listings():
+    return run_psql_script(build_market_clear_npc_sql(), timeout=120)
 
 
 def get_characters(include_offline=True):
@@ -539,6 +1019,105 @@ def get_characters(include_offline=True):
 
     except Exception:
         return []
+
+
+def get_user_character_name(username):
+    """
+    Return the exact in-game character name bound to a local web account.
+
+    VIP self-service authorization depends on this local binding. Admins should
+    enter the character name verbatim when creating/updating VIP accounts.
+    """
+    conn = db()
+    row = conn.execute(
+        "SELECT COALESCE(character_name, '') AS character_name FROM users WHERE username = ?",
+        (username,),
+    ).fetchone()
+    conn.close()
+    return (row["character_name"] if row else "").strip()
+
+
+def get_self_character_for_user(username):
+    """
+    Resolve a VIP account to its own character actor, FLS/account id, and
+    primary character inventory.
+
+    The character name comes from the local users table and is never accepted
+    from the browser during VIP actions.
+    """
+    character_name = get_user_character_name(username)
+    if not character_name:
+        raise ValueError("No in-game character name is linked to this web account.")
+
+    safe_name = character_name.replace("'", "''")
+    sql = f"""
+    SELECT
+        ps.character_name,
+        ps.online_status,
+        ps.life_state,
+        ps.player_pawn_id,
+        inv.id,
+        acc."user",
+        acc.funcom_id
+    FROM dune.player_state ps
+    LEFT JOIN dune.accounts acc
+        ON acc.id = ps.account_id
+    LEFT JOIN LATERAL (
+        SELECT id
+        FROM dune.inventories
+        WHERE actor_id = ps.player_pawn_id
+        ORDER BY id
+        LIMIT 1
+    ) inv ON true
+    WHERE ps.character_name = '{safe_name}'
+    ORDER BY inv.id
+    LIMIT 1;
+    """
+
+    cmd = [
+        "docker",
+        "exec",
+        POSTGRES_CONTAINER,
+        "psql",
+        "-U",
+        "dune",
+        "-d",
+        "dune",
+        "-At",
+        "-F",
+        "\t",
+        "-c",
+        sql,
+    ]
+
+    proc = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=15,
+        check=False,
+    )
+
+    if proc.returncode != 0:
+        raise ValueError(proc.stderr.strip() or "failed to query linked character")
+
+    line = proc.stdout.strip()
+    if not line:
+        raise ValueError(f"Linked character not found: {character_name}")
+
+    parts = line.split("\t")
+    if len(parts) < 7:
+        raise ValueError("unexpected linked character query result")
+
+    return {
+        "character_name": parts[0],
+        "online_status": parts[1],
+        "life_state": parts[2],
+        "character_actor_id": parts[3],
+        "inventory_id": parts[4],
+        "fls_id": parts[5],
+        "funcom_id": parts[6],
+    }
 
 
 
@@ -1761,7 +2340,7 @@ def map_page():
 def grants_page():
     if not logged_in():
         return redirect("/login")
-    if current_role() == "viewer":
+    if not is_operator_or_admin():
         return "Forbidden", 403
     return render_template("grants.html")
 
@@ -1770,9 +2349,18 @@ def grants_page():
 def server_page():
     if not logged_in():
         return redirect("/login")
-    if current_role() == "viewer":
+    if not is_operator_or_admin():
         return "Forbidden", 403
     return render_template("server.html")
+
+
+@app.route("/vip")
+def vip_page():
+    if not logged_in():
+        return redirect("/login")
+    if not can_use_vip_tools():
+        return "Forbidden", 403
+    return render_template("vip.html")
 
 
 @app.route("/admin")
@@ -1823,15 +2411,16 @@ def add_user():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "").strip()
     role = request.form.get("role", "viewer").strip()
+    character_name = request.form.get("character_name", "").strip()
 
-    if role not in ("viewer", "operator", "admin"):
+    if role not in ("viewer", "vip", "operator", "admin"):
         role = "viewer"
 
     if username and password:
         conn = db()
         conn.execute(
-            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)",
-            (username, generate_password_hash(password), role),
+            "INSERT INTO users (username, password, role, character_name) VALUES (?, ?, ?, ?)",
+            (username, generate_password_hash(password), role, character_name),
         )
         conn.commit()
         conn.close()
@@ -1848,7 +2437,7 @@ def change_user_role():
     user_id = request.form.get("user_id", "").strip()
     role = request.form.get("role", "viewer").strip()
 
-    if role not in ("viewer", "operator", "admin"):
+    if role not in ("viewer", "vip", "operator", "admin"):
         role = "viewer"
 
     conn = db()
@@ -1857,6 +2446,26 @@ def change_user_role():
     conn.close()
 
     log_action(session["user"], f"changed user id {user_id} role to {role}")
+    return redirect("/users")
+
+
+@app.route("/users/character", methods=["POST"])
+def change_user_character():
+    if not logged_in() or not is_admin():
+        return "Forbidden", 403
+
+    user_id = request.form.get("user_id", "").strip()
+    character_name = request.form.get("character_name", "").strip()
+
+    conn = db()
+    conn.execute(
+        "UPDATE users SET character_name = ? WHERE id = ?",
+        (character_name, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+    log_action(session["user"], f"changed user id {user_id} character link to {character_name}")
     return redirect("/users")
 
 
@@ -1909,8 +2518,9 @@ def api_characters():
     include_offline = request.args.get("include_offline", "1") != "0"
     chars = get_characters(include_offline=include_offline)
 
-    # Viewer privacy: viewers do not receive IDs.
-    if current_role() == "viewer":
+    # Viewer/VIP privacy: broad character APIs do not expose IDs to lower roles.
+    # VIP self-service receives its own IDs through /api/vip-character only.
+    if current_role() in ("viewer", "vip"):
         chars = [
             {
                 "character_name": c.get("character_name", ""),
@@ -1930,7 +2540,7 @@ def api_online_players():
 
     players = get_characters(include_offline=False)
 
-    if current_role() == "viewer":
+    if current_role() in ("viewer", "vip"):
         players = [
             {
                 "character_name": p.get("character_name", ""),
@@ -1961,8 +2571,8 @@ def api_map_markers():
     map_cfg = MAP_CONFIGS.get(requested_map, MAP_CONFIGS[DEFAULT_MAP_KEY])
     markers = get_map_markers(map_cfg["key"])
 
-    # Viewer privacy: viewers may see names and dots, but not FLS IDs.
-    if current_role() == "viewer":
+    # Viewer/VIP privacy: map markers may show names/dots, but not FLS IDs.
+    if current_role() in ("viewer", "vip"):
         for marker in markers:
             marker.pop("fls_id", None)
 
@@ -2012,6 +2622,154 @@ def api_teleport_offline():
         return jsonify({"ok": False, "error": f"Teleport failed: {exc}"}), 500
 
 
+@app.route("/api/vip-character")
+def api_vip_character():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not can_use_vip_tools():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    try:
+        character = get_self_character_for_user(session["user"])
+        # This endpoint is self-only. It intentionally returns the user's own
+        # actor/inventory/FLS IDs so the VIP page can display useful diagnostics.
+        return jsonify({"ok": True, "character": character})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 404
+
+
+@app.route("/api/vip-overrepair", methods=["POST"])
+def api_vip_overrepair():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not can_use_vip_tools():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    durability = request.form.get("durability", DEFAULT_OVERREPAIR_DURABILITY).strip()
+
+    try:
+        character = get_self_character_for_user(session["user"])
+        if not character.get("character_actor_id") or not character.get("inventory_id"):
+            return jsonify({"ok": False, "error": "linked character actor/inventory not found"}), 400
+
+        sql = build_overrepair_sql(
+            character["character_actor_id"],
+            character["inventory_id"],
+            durability,
+        )
+        output = run_psql(sql, timeout=60)
+
+        log_action(
+            session["user"],
+            f"vip overrepair own character {character['character_name']} durability {durability}",
+        )
+
+        return jsonify({"ok": True, "output": output})
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"VIP overrepair failed: {exc}"}), 500
+
+
+@app.route("/api/vip-teleport-offline", methods=["POST"])
+def api_vip_teleport_offline():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not can_use_vip_tools():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    map_key = request.form.get("map_key", DEFAULT_MAP_KEY).strip()
+    map_cfg = MAP_CONFIGS.get(map_key, MAP_CONFIGS[DEFAULT_MAP_KEY])
+    partition_default = ORNITHOPTER_PARTITION_DEFAULTS.get(map_cfg["key"], "")
+    partition_id = request.form.get("partition_id", str(partition_default)).strip()
+    x = request.form.get("x", "0").strip()
+    y = request.form.get("y", "0").strip()
+    z = request.form.get("z", "1000").strip()
+
+    if not partition_id:
+        return jsonify({"ok": False, "error": "missing partition ID for selected map"}), 400
+
+    try:
+        character = get_self_character_for_user(session["user"])
+        if not character.get("fls_id"):
+            return jsonify({"ok": False, "error": "linked character FLS/account ID not found"}), 400
+
+        output = teleport_offline_player(character["fls_id"], partition_id, x, y, z)
+
+        log_action(
+            session["user"],
+            f"vip teleport own character {character['character_name']} partition {partition_id} to ({x}, {y}, {z})",
+        )
+
+        return jsonify({"ok": True, "output": output})
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"VIP teleport failed: {exc}"}), 500
+
+
+@app.route("/api/vip-give-scout-thopter", methods=["POST"])
+def api_vip_give_scout_thopter():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not can_use_vip_tools():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    try:
+        character = get_self_character_for_user(session["user"])
+        if not character.get("fls_id"):
+            return jsonify({"ok": False, "error": "linked character FLS/account ID not found"}), 400
+
+        cmd = [
+            str(DUNE_SCRIPT),
+            "admin",
+            "grant-template",
+            character["fls_id"],
+            SCOUT_THOPTER_TEMPLATE,
+        ]
+        output = run_command(cmd, timeout=60)
+
+        log_action(
+            session["user"],
+            f"vip grant template {SCOUT_THOPTER_TEMPLATE} to own character {character['character_name']}",
+        )
+
+        return jsonify({"ok": True, "output": output})
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"VIP scout thopter grant failed: {exc}"}), 500
+
+
+@app.route("/api/vip-give-medium-thopter", methods=["POST"])
+def api_vip_give_medium_thopter():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not can_use_vip_tools():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    try:
+        character = get_self_character_for_user(session["user"])
+        if not character.get("fls_id"):
+            return jsonify({"ok": False, "error": "linked character FLS/account ID not found"}), 400
+
+        outputs = []
+        for item_id, qty in MEDIUM_THOPTER_BUNDLE:
+            outputs.append(grant_item(character["fls_id"], item_id, qty, "1.0"))
+
+        log_action(
+            session["user"],
+            f"vip grant Mk6 Medium thopter bundle to own character {character['character_name']}",
+        )
+
+        return jsonify({"ok": True, "output": "\n\n---\n\n".join(outputs)})
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"VIP medium thopter grant failed: {exc}"}), 500
+
+
 @app.route("/api/emergency-return", methods=["POST"])
 def api_emergency_return():
     if not logged_in():
@@ -2037,6 +2795,147 @@ def api_emergency_return():
 
     except Exception as exc:
         return jsonify({"ok": False, "error": f"Emergency return failed: {exc}"}), 500
+
+
+@app.route("/api/market-preset-preview")
+def api_market_preset_preview():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    try:
+        summary = market_seed_summary(request.args.get("price_multiplier"))
+        return jsonify({"ok": True, "summary": summary})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Market preset preview failed: {exc}"}), 500
+
+
+@app.route("/api/market-seed-preset", methods=["POST"])
+def api_market_seed_preset():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    clear_existing = request.form.get("clear_existing", "0") == "1"
+    price_multiplier = market_price_multiplier_from_value(request.form.get("price_multiplier"))
+    exchange_id = market_exchange_id_from_value(request.form.get("exchange_id"))
+
+    try:
+        output = seed_market_preset(
+            clear_existing=clear_existing,
+            price_multiplier=price_multiplier,
+            exchange_id=exchange_id,
+        )
+        log_action(
+            session["user"],
+            f"seeded market preset with {price_multiplier}x prices exchange_id={exchange_id or 'Global'} clear_existing={clear_existing}",
+        )
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Market preset seed failed: {exc}"}), 500
+
+
+@app.route("/api/market-clear-npc", methods=["POST"])
+def api_market_clear_npc():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    try:
+        output = clear_market_npc_listings()
+        log_action(session["user"], f"cleared {MARKET_BOT_CLASS} NPC market listings")
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Market NPC clear failed: {exc}"}), 500
+
+
+@app.route("/api/market-buy-player-listings", methods=["POST"])
+def api_market_buy_player_listings():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    price_multiplier = market_price_multiplier_from_value(request.form.get("price_multiplier"))
+    threshold_percent = market_buy_threshold_from_value(request.form.get("threshold_percent"))
+    max_buys = market_buy_max_from_value(request.form.get("max_buys"))
+
+    try:
+        output = run_buyback_sweep(
+            price_multiplier=price_multiplier,
+            threshold_percent=threshold_percent,
+            max_buys=max_buys,
+        )
+        log_action(
+            session["user"],
+            f"{MARKET_BOT_CLASS} bought player listings at {threshold_percent}% threshold using {price_multiplier}x prices, max {max_buys}",
+        )
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Market buy failed: {exc}"}), 500
+
+
+@app.route("/api/market-buyback-status")
+def api_market_buyback_status():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    return jsonify({"ok": True, "status": market_buyback_status()})
+
+
+@app.route("/api/market-buyback-start", methods=["POST"])
+def api_market_buyback_start():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    price_multiplier = market_price_multiplier_from_value(request.form.get("price_multiplier"))
+    threshold_percent = market_buy_threshold_from_value(request.form.get("threshold_percent"))
+    max_buys = market_buy_max_from_value(request.form.get("max_buys"))
+    interval_minutes = market_buyback_interval_from_value(request.form.get("interval_minutes"))
+
+    try:
+        status = start_market_buyback_sweep(
+            price_multiplier=price_multiplier,
+            threshold_percent=threshold_percent,
+            max_buys=max_buys,
+            interval_minutes=interval_minutes,
+        )
+        log_action(
+            session["user"],
+            f"started automated {MARKET_BOT_CLASS} buyback every {status['interval_minutes']} minutes at {threshold_percent}% using {price_multiplier}x prices, max {max_buys}",
+        )
+        return jsonify({"ok": True, "status": status, "output": "Automated buyback sweep started."})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Market buyback start failed: {exc}"}), 500
+
+
+@app.route("/api/market-buyback-stop", methods=["POST"])
+def api_market_buyback_stop():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    try:
+        status = stop_market_buyback_sweep()
+        log_action(session["user"], f"stopped automated {MARKET_BOT_CLASS} buyback")
+        return jsonify({"ok": True, "status": status, "output": "Automated buyback sweep stopped."})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Market buyback stop failed: {exc}"}), 500
 
 
 

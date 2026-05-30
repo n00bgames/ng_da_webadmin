@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =========================================================
-# n00bGame Dune Awakening Web-Admin Shutdown Script
+# Easy Dune Admin Shutdown Script
 # =========================================================
 
 cd "$(dirname "$0")"

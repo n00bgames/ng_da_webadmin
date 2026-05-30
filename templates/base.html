@@ -1,7 +1,7 @@
-<!doctype html>
+﻿<!doctype html>
 <html>
 <head>
-<title>{% block title %}n00bGame's Dune Awakening Web-Admin{% endblock %}</title>
+<title>{% block title %}Easy Dune Admin{% endblock %}</title>
 <link rel="icon" href="/static/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
@@ -205,7 +205,7 @@ a:hover {
 <img class="banner" src="/static/dune-admin.png" alt="Dune Admin Banner">
 
 <div class="title">
-    n00bGame's Dune Awakening Web-Admin
+    Easy Dune Admin
     <span class="alpha-badge">ALPHA</span>
 </div>
 
@@ -213,7 +213,10 @@ a:hover {
     <a href="/">Dashboard</a>
     <a href="/online">Who's Online</a>
     <a href="/map">Live Map</a>
-    {% if session.role != "viewer" %}
+    {% if session.role == "vip" or session.role == "admin" %}
+    <a href="/vip">VIP Tools</a>
+    {% endif %}
+    {% if session.role == "operator" or session.role == "admin" %}
     <a href="/grants">Item Grants</a>
     <a href="/server">Server Management</a>
     {% endif %}
@@ -235,7 +238,7 @@ a:hover {
 </div>
 
 <div class="footer">
-    Dune Web-Admin {{ panel_version }} · RedBlink Stack {{ redblink_stack_version }}
+    Easy Dune Admin {{ panel_version }} - RedBlink Stack {{ redblink_stack_version }}
 </div>
 
 {% block scripts %}{% endblock %}

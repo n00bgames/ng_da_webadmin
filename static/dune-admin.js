@@ -228,6 +228,66 @@ function selectItem(itemId) {
 }
 
 
+async function loadMarketPresetPreview() {
+    const panel = document.getElementById("marketPresetPreview");
+    if (!panel) return;
+
+    try {
+        const multiplierInput = document.getElementById("marketPriceMultiplier");
+        const multiplier = multiplierInput ? multiplierInput.value || "1" : "1";
+        const response = await fetch(`/api/market-preset-preview?price_multiplier=${encodeURIComponent(multiplier)}`);
+        const data = await response.json();
+
+        if (!data.ok) {
+            panel.textContent = data.error || "Unable to load market seed preview.";
+            return;
+        }
+
+        const summary = data.summary || {};
+        panel.textContent =
+            `Listings: ${summary.listings || 0}\n`
+            + `Equippable listings: ${summary.equippable_listings || 0}\n`
+            + `Schematic listings: ${summary.schematic_listings || 0}\n`
+            + `Resource listings: ${summary.resource_listings || 0}\n`
+            + `Resource units: ${summary.resource_units || 0}\n`
+            + `Boosted wing/track/locomotion listings: ${summary.special_boosted_listings || 0}\n`
+            + `Price multiplier: ${summary.price_multiplier || 1}x`;
+    } catch (err) {
+        panel.textContent = "Unable to load market seed preview.";
+    }
+}
+
+
+async function refreshMarketBuybackStatus() {
+    const panel = document.getElementById("marketBuybackStatus");
+    if (!panel) return;
+
+    try {
+        const response = await fetch("/api/market-buyback-status");
+        const data = await response.json();
+
+        if (!data.ok) {
+            panel.textContent = data.error || "Unable to load buyback automation status.";
+            return;
+        }
+
+        const status = data.status || {};
+        panel.textContent =
+            `Automated buyback: ${status.enabled ? "Running" : "Stopped"}\n`
+            + `Interval: ${status.interval_minutes || 30} minutes\n`
+            + `Price multiplier: ${status.price_multiplier || 1}x\n`
+            + `Buy threshold: ${status.threshold_percent || 60}%\n`
+            + `Max buys: ${status.max_buys || 500}\n`
+            + `Next run: ${status.next_run || "Not scheduled"}\n`
+            + `Last run: ${status.last_run || "Never"}\n`
+            + `Runs completed: ${status.runs || 0}\n`
+            + `Last error: ${status.last_error || "None"}`;
+    } catch (err) {
+        panel.textContent = "Unable to load buyback automation status.";
+    }
+}
+
+
 // =========================================================
 // Vehicle repair helpers
 // =========================================================
