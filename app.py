@@ -275,7 +275,7 @@ MAP_CONFIGS = {
         "max_y": 353821.95,
         "flip_y": False,
         # Confirmed from existing dashboard examples.
-        "default_partition_id": 250100,
+        "default_partition_id": 1,
     },
     "DeepDesert": {
         "key": "DeepDesert",
@@ -290,7 +290,7 @@ MAP_CONFIGS = {
         "flip_y": False,
         # Unknown on this server until tested. Leave blank in the UI
         # unless you confirm the correct partition id.
-        "default_partition_id": "",
+        "default_partition_id": "8",
     },
 }
 

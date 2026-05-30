@@ -35,6 +35,10 @@ This release candidate is intended for private/LAN/VPN-hosted self-hosted server
 
 ![Dashboard](images/dashboard.png)
 
+### Admin Panel
+
+![Admin panel](images/admin-panel.png)
+
 ### Live Map
 
 ![Live map](images/live-map.png)
