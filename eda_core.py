@@ -2157,6 +2157,91 @@ def build_set_character_level_sql(character_actor_id, target_level):
     )
 
 
+def build_give_skill_points_sql(character_actor_id, skill_points):
+    """
+    Build admin-only SQL to add usable character skill points.
+
+    Skill points live on the same DuneCharacter FGL entity as character XP.
+    Adding to both TotalSkillPoints and UnspentSkillPoints gives the character
+    new spendable points without disturbing points already spent in skill trees.
+    """
+    actor_id = int(character_actor_id)
+    amount = int(skill_points)
+
+    if amount <= 0:
+        raise ValueError("skill point amount must be greater than zero")
+    if amount > 1000:
+        raise ValueError("skill point amount must be 1000 or lower")
+
+    return f"""
+WITH settings AS (
+    SELECT
+        {actor_id}::bigint AS character_actor_id,
+        {amount}::bigint AS skill_points_delta
+),
+selected_player AS (
+    SELECT
+        ps.character_name,
+        ps.player_pawn_id AS character_actor_id,
+        ps.online_status,
+        ps.life_state
+    FROM dune.player_state ps
+    JOIN settings s
+        ON s.character_actor_id = ps.player_pawn_id
+),
+current_state AS (
+    SELECT
+        sp.character_name,
+        sp.character_actor_id,
+        sp.online_status,
+        sp.life_state,
+        fe.entity_id,
+        COALESCE((fe.components #>> '{{FLevelComponent,1,TotalSkillPoints}}')::bigint, 0) AS before_total_skill_points,
+        COALESCE((fe.components #>> '{{FLevelComponent,1,UnspentSkillPoints}}')::bigint, 0) AS before_unspent_skill_points
+    FROM selected_player sp
+    JOIN dune.actor_fgl_entities afe
+        ON afe.actor_id = sp.character_actor_id
+       AND afe.slot_name = 'DuneCharacter'
+    JOIN dune.fgl_entities fe
+        ON fe.entity_id = afe.entity_id
+),
+updated_fgl AS (
+    UPDATE dune.fgl_entities fe
+    SET components = jsonb_set(
+        jsonb_set(
+            fe.components,
+            '{{FLevelComponent,1,TotalSkillPoints}}',
+            to_jsonb(cs.before_total_skill_points + s.skill_points_delta),
+            true
+        ),
+        '{{FLevelComponent,1,UnspentSkillPoints}}',
+        to_jsonb(cs.before_unspent_skill_points + s.skill_points_delta),
+        true
+    )
+    FROM current_state cs
+    JOIN settings s
+        ON s.character_actor_id = cs.character_actor_id
+    WHERE fe.entity_id = cs.entity_id
+    RETURNING fe.entity_id
+)
+SELECT
+    cs.character_name,
+    cs.character_actor_id,
+    cs.online_status,
+    cs.life_state,
+    cs.before_total_skill_points,
+    (cs.before_total_skill_points + s.skill_points_delta) AS after_total_skill_points,
+    cs.before_unspent_skill_points,
+    (cs.before_unspent_skill_points + s.skill_points_delta) AS after_unspent_skill_points,
+    s.skill_points_delta AS skill_points_added
+FROM current_state cs
+JOIN settings s
+    ON s.character_actor_id = cs.character_actor_id
+JOIN updated_fgl uf
+    ON uf.entity_id = cs.entity_id;
+"""
+
+
 def grant_item(player_id, item_id, quantity, durability="1.0"):
     cmd = [
         str(DUNE_SCRIPT),

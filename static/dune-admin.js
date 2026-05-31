@@ -151,6 +151,7 @@ async function loadCharactersForAdminPage() {
     fillCharacterSelect("researchCharacterSelect", chars);
     fillCharacterSelect("characterXpCharacterSelect", chars);
     fillCharacterSelect("characterLevelCharacterSelect", chars);
+    fillCharacterSelect("skillPointsCharacterSelect", chars);
     fillCharacterSelect("xpCharacterSelect", chars);
     fillCharacterSelect("specializationResetCharacterSelect", chars);
     fillCharacterSelect("progressionCharacterSelect", chars);
@@ -214,6 +215,13 @@ function fillCharacterXpActorId() {
 function fillCharacterLevelActorId() {
     const sel = document.getElementById("characterLevelCharacterSelect");
     const input = document.getElementById("characterLevelActorId");
+    const c = latestCharacters[Number(sel.value)];
+    if (input && c) input.value = c.character_actor_id || "";
+}
+
+function fillSkillPointsActorId() {
+    const sel = document.getElementById("skillPointsCharacterSelect");
+    const input = document.getElementById("skillPointsActorId");
     const c = latestCharacters[Number(sel.value)];
     if (input && c) input.value = c.character_actor_id || "";
 }

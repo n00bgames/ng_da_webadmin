@@ -107,6 +107,7 @@ and contributors credited where they are used or targeted.
 - Admin-only research point setter for selected characters
 - Admin-only character XP grant for the actual displayed character level
 - Admin-only set character level tool using the same level XP curve
+- Admin-only skill point grant that adds usable skill points without changing character level XP
 - WIP/unconfirmed admin-only specialization XP grant for Combat, Crafting, Gathering, Exploration, and Sabotage tracks. It appears to create/update the expected database entries, but persistence and in-game behavior still need confirmation after reaching the required progression/faction access.
 - Admin-only specialization reset for one track or all tracks plus keystones
 - Experimental admin-only progression preset apply/reset tools for curated journey roots

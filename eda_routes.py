@@ -996,6 +996,28 @@ def api_set_character_level():
         return jsonify({"ok": False, "error": f"Character level update failed: {exc}"}), 500
 
 
+@app.route("/api/give-skill-points", methods=["POST"])
+def api_give_skill_points():
+    if not logged_in():
+        return jsonify({"ok": False, "error": "not logged in"}), 401
+    if not is_admin():
+        return jsonify({"ok": False, "error": "permission denied"}), 403
+
+    character_actor_id = request.form.get("character_actor_id", "").strip()
+    skill_points = request.form.get("skill_points", "").strip()
+
+    try:
+        sql = build_give_skill_points_sql(character_actor_id, skill_points)
+        output = run_psql(sql, timeout=60)
+        log_action(
+            session["user"],
+            f"give {skill_points} skill points to actor {character_actor_id}",
+        )
+        return jsonify({"ok": True, "output": output})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": f"Skill point grant failed: {exc}"}), 500
+
+
 @app.route("/api/progression-preset", methods=["POST"])
 def api_progression_preset():
     if not logged_in():

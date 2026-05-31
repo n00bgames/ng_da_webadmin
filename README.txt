@@ -94,6 +94,8 @@ Item Grants:
 - Admin-only research point setter for selected characters
 - Admin-only character XP grant for the actual displayed character level
 - Admin-only set character level tool using the same level XP curve
+- Admin-only skill point grant that adds usable skill points without changing
+  character level XP
 - WIP/unconfirmed admin-only specialization XP grant for Combat, Crafting,
   Gathering, Exploration, and Sabotage tracks. It appears to create/update
   the expected database entries, but persistence and in-game behavior still

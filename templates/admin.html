@@ -417,6 +417,25 @@ Lasgun kit and Solaris grants use RedBlink's normal item grant command. Research
     <button type="submit">Set Character Level</button>
 </form>
 
+<form id="skillPointsForm">
+    <div class="warning">
+        Adds usable skill points without changing character level XP. This increases both TotalSkillPoints and UnspentSkillPoints on the selected character's DuneCharacter data. The character should be offline before changing skill points.
+    </div>
+
+    <label>Character</label>
+    <select id="skillPointsCharacterSelect" onchange="fillSkillPointsActorId()">
+        <option value="">Loading characters...</option>
+    </select>
+
+    <label>Character Actor ID</label>
+    <input type="text" name="character_actor_id" id="skillPointsActorId" required>
+
+    <label>Skill Points To Add</label>
+    <input type="number" name="skill_points" id="skillPointsAmount" min="1" max="1000" step="1" value="1" required>
+
+    <button type="submit">Give Skill Points</button>
+</form>
+
 <form id="specializationXpForm">
     <div class="warning">
         WIP / unconfirmed: Specialization XP is separate from character level XP. This tool appears to create or update the expected database entries, but persistence and in-game behavior are not yet verified because current testing has not reached the required progression/faction access. Each specialization track appears capped at <b>{{ "{:,}".format(specialization_max_xp) }}</b> XP; stay at or below that per track while testing. After progression edits, a map restart or full battlegroup restart may be required; restarts can appear slow, and login may briefly show an error before recovering.
@@ -667,6 +686,18 @@ characterLevelForm.addEventListener("submit", async function(event) {
     }
 
     await postForm("/api/set-character-level", characterLevelForm);
+});
+
+const skillPointsForm = document.getElementById("skillPointsForm");
+skillPointsForm.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const amount = document.getElementById("skillPointsAmount").value || "0";
+    if (!confirm(`Add ${amount} usable skill point(s) to this character? The character should be offline. Continue?`)) {
+        return;
+    }
+
+    await postForm("/api/give-skill-points", skillPointsForm);
 });
 
 const specializationXpForm = document.getElementById("specializationXpForm");
